@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>最小二乘、最大似然与最大后验：为什么残差平方能够估计机器人状态？ | Tomato&#39;s Blog</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="从高斯噪声、似然与贝叶斯公式出发，推导加权最小二乘、最大似然和最大后验之间的关系，理解协方差、信息矩阵与状态先验如何进入 SLAM。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="最小二乘、最大似然与最大后验：为什么残差平方能够估计机器人状态？">
+<meta property="og:url" content="https://luomengwei.github.io/2026/08/03/least-squares-mle-map-robot-state-estimation/index.html">
+<meta property="og:site_name" content="Tomato&#39;s Blog">
+<meta property="og:description" content="从高斯噪声、似然与贝叶斯公式出发，推导加权最小二乘、最大似然和最大后验之间的关系，理解协方差、信息矩阵与状态先验如何进入 SLAM。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://luomengwei.github.io/images/nonlinear-optimization/13-residual-probability-question.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/nonlinear-optimization/14-gaussian-noise.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/nonlinear-optimization/15-likelihood-to-least-squares.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/nonlinear-optimization/16-covariance-information.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/nonlinear-optimization/17-mle-map-prior.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/nonlinear-optimization/18-ls-mle-map-summary.png">
+<meta property="article:published_time" content="2026-08-03T12:41:00.000Z">
+<meta property="article:modified_time" content="2026-08-10T15:29:31.496Z">
+<meta property="article:author" content="Tomato">
+<meta property="article:tag" content="SLAM">
+<meta property="article:tag" content="协方差">
+<meta property="article:tag" content="最大似然估计">
+<meta property="article:tag" content="最大后验估计">
+<meta property="article:tag" content="最小二乘">
+<meta property="article:tag" content="非线性优化">
+<meta property="article:tag" content="高斯分布">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://luomengwei.github.io/images/nonlinear-optimization/13-residual-probability-question.png">
+  
+    <link rel="alternate" href="/atom.xml" title="Tomato's Blog" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
+
+<!-- hexo injector head_end start --><link rel="stylesheet" href="/css/custom.css"><!-- hexo injector head_end end --><meta name="generator" content="Hexo 8.1.2"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Tomato&#39;s Blog</a>
+      </h1>
+      
+        <h2 id="subtitle-wrap">
+          <a href="/" id="subtitle">Robotics, SLAM and LiDAR-IMU Notes</a>
+        </h2>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS 订阅"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="搜索"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜索"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://luomengwei.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-least-squares-mle-map-robot-state-estimation" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/08/03/least-squares-mle-map-robot-state-estimation/" class="article-date">
+  <time class="dt-published" datetime="2026-08-03T12:41:00.000Z" itemprop="datePublished">2026-08-03</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/SLAM/">SLAM</a>►<a class="article-category-link" href="/categories/SLAM/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/">非线性优化</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      最小二乘、最大似然与最大后验：为什么残差平方能够估计机器人状态？
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p><a href="/2026/08/01/slam-state-observation-prediction-residual-cost-function/">上一篇文章</a>把 SLAM 优化问题拆成了状态、观测、预测、残差与代价函数，并得到了一类常见的加权平方和目标。</p>
+<p>这一篇继续追问：为什么是残差平方？权重为什么常写成协方差的逆？最大似然、最大后验与最小二乘究竟是什么关系？</p>
+<span id="more"></span>
+
+<style>
+.probabilistic-estimation-figure {
+  margin: 1.5em auto 1.8em;
+  text-align: center;
+}
+.probabilistic-estimation-figure img {
+  display: block;
+  width: 84%;
+  max-width: 940px;
+  height: auto;
+  margin: 0 auto;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.probabilistic-estimation-figure-wide img {
+  width: 92%;
+  max-width: 1060px;
+}
+.probabilistic-estimation-figure figcaption {
+  display: none;
+}
+@media (max-width: 720px) {
+  .probabilistic-estimation-figure img,
+  .probabilistic-estimation-figure-wide img {
+    width: 100%;
+  }
+}
+</style>
+
+<p>上一篇的目标函数写成：</p>
+<div class="math-display">\[F(\mathbf{x})
+=
+\frac{1}{2}
+\sum_i
+\mathbf{r}_i^T
+\mathbf{W}_i
+\mathbf{r}_i\]</div>
+<p>机器人通过调整状态 <span class="math-inline">\(\mathbf{x}\)</span>，让这个代价函数尽可能小。但这里还埋着几个重要问题：</p>
+<ul>
+<li>为什么通常最小化残差平方，而不是绝对值或四次方？</li>
+<li>权重矩阵 <span class="math-inline">\(\mathbf{W}_i\)</span> 从哪里来？</li>
+<li>为什么它经常等于协方差矩阵的逆？</li>
+<li>最小二乘和概率有什么关系？</li>
+<li>最大似然估计与最大后验估计有什么区别？</li>
+<li>BA、因子图与滤波为什么都会出现类似的平方和？</li>
+</ul>
+<p>最核心的关系是：</p>
+<div class="math-display">\[\boxed{
+\text{高斯测量噪声}
+\Longrightarrow
+\text{最大似然估计}
+\Longleftrightarrow
+\text{加权最小二乘}
+}\]</div>
+<p>进一步加入状态先验后，就会得到最大后验估计。</p>
+<h2 id="1-先从三个位置测量开始"><a href="#1-先从三个位置测量开始" class="headerlink" title="1. 先从三个位置测量开始"></a>1. 先从三个位置测量开始</h2><p>假设一台机器人静止在直线上，同一个传感器重复测量三次：</p>
+<div class="math-display">\[z_1=9.8\text{ m},
+\qquad
+z_2=10.1\text{ m},
+\qquad
+z_3=10.4\text{ m}\]</div>
+<p>机器人位置记为 <span class="math-inline">\(x\)</span>。如果传感器直接测量位置，那么预测观测与残差分别是：</p>
+<div class="math-display">\[\hat z_i=x,
+\qquad
+r_i(x)=z_i-x\]</div>
+<p>最常见的做法是构造平方和：</p>
+<div class="math-display">\[F(x)
+=
+\frac{1}{2}
+\left[
+(9.8-x)^2+(10.1-x)^2+(10.4-x)^2
+\right]\]</div>
+<p>寻找 <span class="math-inline">\(x^\star=\operatorname*{arg\,min}_x F(x)\)</span>，可以得到：</p>
+<div class="math-display">\[x^\star=10.1\text{ m}\]</div>
+<p>也就是三个测量的平均值。这个结果看起来很合理，但它并没有回答：为什么最合理的位置恰好对应残差平方和最小？</p>
+<p>如果改为最小化绝对值，解会倾向于中位数；如果最小化四次方，又会得到另一种结果。真正决定代价函数形式的，是我们对测量噪声所作的概率假设。</p>
+<figure class="probabilistic-estimation-figure probabilistic-estimation-figure-wide">
+  <img src="/images/nonlinear-optimization/13-residual-probability-question.png" alt="" aria-label="图 1 同一真实位置产生多个带噪测量，平方误差、绝对值误差和鲁棒代价对应不同的噪声假设">
+</figure>
+
+<h2 id="2-传感器为什么每次测得都不一样？"><a href="#2-传感器为什么每次测得都不一样？" class="headerlink" title="2. 传感器为什么每次测得都不一样？"></a>2. 传感器为什么每次测得都不一样？</h2><p>即使机器人完全静止，多次测量也可能不同，因为传感器观测中存在噪声。一次标量测量可以写成：</p>
+<div class="math-display">\[z_i=x_{\text{true}}+n_i\]</div>
+<p>其中，<span class="math-inline">\(x_{\text{true}}\)</span> 是真实位置，<span class="math-inline">\(n_i\)</span> 是第 <span class="math-inline">\(i\)</span> 次测量噪声，<span class="math-inline">\(z_i\)</span> 是实际测量结果。</p>
+<p>噪声可能来自电路热噪声、激光测距抖动、图像特征定位误差、IMU 随机噪声、GPS 多路径、时间同步误差和量化误差等。单次噪声无法提前准确预测，但可以用概率分布描述哪些误差常见、哪些误差罕见。</p>
+<h2 id="3-什么是高斯噪声？"><a href="#3-什么是高斯噪声？" class="headerlink" title="3. 什么是高斯噪声？"></a>3. 什么是高斯噪声？</h2><p>在很多状态估计问题中，常假设标量测量噪声服从高斯分布：</p>
+<div class="math-display">\[n\sim\mathcal N(0,\sigma^2)\]</div>
+<p>其概率密度函数为：</p>
+<div class="math-display">\[p(n)
+=
+\frac{1}{\sqrt{2\pi\sigma^2}}
+\exp\left(-\frac{n^2}{2\sigma^2}\right)\]</div>
+<h3 id="3-1-小误差更常见"><a href="#3-1-小误差更常见" class="headerlink" title="3.1 小误差更常见"></a>3.1 小误差更常见</h3><p>当 <span class="math-inline">\(n\approx0\)</span> 时，指数项接近 1，概率密度较大。高斯模型因此认为小误差比大误差更常见。</p>
+<h3 id="3-2-大误差更少见"><a href="#3-2-大误差更少见" class="headerlink" title="3.2 大误差更少见"></a>3.2 大误差更少见</h3><p>随着 <span class="math-inline">\(|n|\)</span> 增大，<span class="math-inline">\(-n^2/(2\sigma^2)\)</span> 会快速减小，分布两端的密度随之降低。</p>
+<h3 id="3-3-正负误差是对称的"><a href="#3-3-正负误差是对称的" class="headerlink" title="3.3 正负误差是对称的"></a>3.3 正负误差是对称的</h3><p>因为密度只与 <span class="math-inline">\(n^2\)</span> 有关，所以 <span class="math-inline">\(p(n)=p(-n)\)</span>。大小相同、方向相反的误差被认为同样可能。</p>
+<h3 id="3-4-标准差决定分布宽度"><a href="#3-4-标准差决定分布宽度" class="headerlink" title="3.4 标准差决定分布宽度"></a>3.4 标准差决定分布宽度</h3><p><span class="math-inline">\(\sigma\)</span> 越小，曲线越窄，测量越集中；<span class="math-inline">\(\sigma\)</span> 越大，曲线越宽，说明不确定性越高。</p>
+<figure class="probabilistic-estimation-figure probabilistic-estimation-figure-wide">
+  <img src="/images/nonlinear-optimization/14-gaussian-noise.png" alt="" aria-label="图 2 高精度和低精度传感器对应不同宽度的高斯噪声分布，标准差越小测量越集中">
+</figure>
+
+<p>许多微小、近似独立的随机扰动叠加后，常会呈现近似高斯形态；高斯模型也具有很好的数学性质。但它仍然只是一种模型假设。错误匹配、动态物体和错误回环通常会产生明显的非高斯外点。</p>
+<h2 id="4-已知状态时，一次测量出现的密度是多少？"><a href="#4-已知状态时，一次测量出现的密度是多少？" class="headerlink" title="4. 已知状态时，一次测量出现的密度是多少？"></a>4. 已知状态时，一次测量出现的密度是多少？</h2><p>设待估计位置为 <span class="math-inline">\(x\)</span>，测量模型为：</p>
+<div class="math-display">\[z=x+n,
+\qquad
+n\sim\mathcal N(0,\sigma^2)\]</div>
+<p>由 <span class="math-inline">\(n=z-x\)</span> 可得条件概率密度：</p>
+<div class="math-display">\[p(z\mid x)
+=
+\frac{1}{\sqrt{2\pi\sigma^2}}
+\exp\left[-\frac{(z-x)^2}{2\sigma^2}\right]\]</div>
+<p>其中 <span class="math-inline">\(z-x\)</span> 正是残差。于是：</p>
+<ul>
+<li>残差越小，当前测量在该候选状态下的密度越高；</li>
+<li>残差越大，当前状态对测量的解释越不合理。</li>
+</ul>
+<p>严格地说，连续变量在单个点上的概率为零，这里比较的是<strong>概率密度</strong>，或者某个小区间内的概率。</p>
+<h2 id="5-什么是似然？"><a href="#5-什么是似然？" class="headerlink" title="5. 什么是似然？"></a>5. 什么是似然？</h2><p>概率模型与似然使用同一个表达式 <span class="math-inline">\(p(z\mid x)\)</span>，但固定的量不同。</p>
+<h3 id="5-1-作为概率模型：状态已知，观测变化"><a href="#5-1-作为概率模型：状态已知，观测变化" class="headerlink" title="5.1 作为概率模型：状态已知，观测变化"></a>5.1 作为概率模型：状态已知，观测变化</h3><p>当 <span class="math-inline">\(x\)</span> 固定、<span class="math-inline">\(z\)</span> 变化时，<span class="math-inline">\(p(z\mid x)\)</span> 描述给定状态下各种观测的概率密度。</p>
+<h3 id="5-2-作为似然：观测已知，状态变化"><a href="#5-2-作为似然：观测已知，状态变化" class="headerlink" title="5.2 作为似然：观测已知，状态变化"></a>5.2 作为似然：观测已知，状态变化</h3><p>状态估计时，测量 <span class="math-inline">\(z\)</span> 已经发生。把 <span class="math-inline">\(z\)</span> 固定、将 <span class="math-inline">\(p(z\mid x)\)</span> 看成关于 <span class="math-inline">\(x\)</span> 的函数：</p>
+<div class="math-display">\[L(x)=p(z\mid x)\]</div>
+<p>这就是似然函数。它用来比较不同候选状态对已发生观测的解释能力，但它不必对状态 <span class="math-inline">\(x\)</span> 积分为 1。</p>
+<p>一句话概括：概率模型关心“给定状态可能看到什么”，似然关心“已经看到这些数据后，哪个状态更能解释它们”。</p>
+<h2 id="6-什么是最大似然估计？"><a href="#6-什么是最大似然估计？" class="headerlink" title="6. 什么是最大似然估计？"></a>6. 什么是最大似然估计？</h2><p>最大似然估计（Maximum Likelihood Estimation，MLE）选择使已有观测最可能出现的状态：</p>
+<div class="math-display">\[x^\star_{\text{MLE}}
+=
+\operatorname*{arg\,max}_x p(z\mid x)\]</div>
+<p>对一次方差已知、且与状态无关的高斯测量，归一化系数与 <span class="math-inline">\(x\)</span> 无关。最大化密度等价于：</p>
+<div class="math-display">\[x^\star_{\text{MLE}}
+=
+\operatorname*{arg\,min}_x
+\frac{(z-x)^2}{2\sigma^2}\]</div>
+<p>因此，一次高斯测量的最大似然估计等价于最小化加权残差平方。</p>
+<h2 id="7-多次独立测量的似然"><a href="#7-多次独立测量的似然" class="headerlink" title="7. 多次独立测量的似然"></a>7. 多次独立测量的似然</h2><p>设有 <span class="math-inline">\(m\)</span> 次测量，并假设它们在给定状态后条件独立：</p>
+<div class="math-display">\[p(\mathbf z\mid x)
+=
+\prod_{i=1}^{m}p(z_i\mid x)\]</div>
+<p>最大似然估计为：</p>
+<div class="math-display">\[x^\star_{\text{MLE}}
+=
+\operatorname*{arg\,max}_x
+\prod_{i=1}^{m}p(z_i\mid x)\]</div>
+<p>大量小于 1 的密度值直接相乘，既不方便推导，也容易造成数值下溢，因此工程中通常转而处理对数似然。</p>
+<h2 id="8-为什么要取对数？"><a href="#8-为什么要取对数？" class="headerlink" title="8. 为什么要取对数？"></a>8. 为什么要取对数？</h2><p>对数能把乘积变成加和：</p>
+<div class="math-display">\[\log\prod_i p(z_i\mid x)
+=
+\sum_i\log p(z_i\mid x)\]</div>
+<p>由于对数函数单调递增，最大化似然与最大化对数似然具有相同的最优解。为了把问题写成最小化形式，通常使用负对数似然：</p>
+<div class="math-display">\[x^\star_{\text{MLE}}
+=
+\operatorname*{arg\,min}_x
+\left[-\log p(\mathbf z\mid x)\right]\]</div>
+<p>将相互独立、方差已知的高斯测量代入，可得：</p>
+<div class="math-display">\[-\log p(\mathbf z\mid x)
+=
+\sum_i
+\left[
+\frac{(z_i-x)^2}{2\sigma_i^2}
++
+\frac{1}{2}\log(2\pi\sigma_i^2)
+\right]\]</div>
+<p>当 <span class="math-inline">\(\sigma_i\)</span> 已知且不依赖 <span class="math-inline">\(x\)</span> 时，第二项对状态优化是常数，可以忽略。定义 <span class="math-inline">\(r_i(x)=z_i-x\)</span>，便得到：</p>
+<div class="math-display">\[x^\star_{\text{MLE}}
+=
+\operatorname*{arg\,min}_x
+\frac{1}{2}
+\sum_i
+\frac{r_i^2(x)}{\sigma_i^2}\]</div>
+<p>这就是加权最小二乘。若协方差本身依赖待估状态，就不能随意丢掉对数行列式等项。</p>
+<figure class="probabilistic-estimation-figure probabilistic-estimation-figure-wide">
+  <img src="/images/nonlinear-optimization/15-likelihood-to-least-squares.png" alt="" aria-label="图 3 独立高斯测量的联合似然经负对数变成加和，并形成加权最小二乘目标">
+</figure>
+
+<h2 id="9-为什么方差越小，权重越大？"><a href="#9-为什么方差越小，权重越大？" class="headerlink" title="9. 为什么方差越小，权重越大？"></a>9. 为什么方差越小，权重越大？</h2><p>标量高斯残差的权重是：</p>
+<div class="math-display">\[w_i=\frac{1}{\sigma_i^2}\]</div>
+<p>假设传感器 A 的标准差为 <span class="math-inline">\(0.1\text{ m}\)</span>，传感器 B 的标准差为 <span class="math-inline">\(1.0\text{ m}\)</span>，则二者权重分别为 100 和 1。同样产生 <span class="math-inline">\(0.2\text{ m}\)</span> 残差时，加权平方项分别为 4 和 0.04。</p>
+<p>这并不是主观上“更喜欢”传感器 A，而是因为对标准差只有 <span class="math-inline">\(0.1\text{ m}\)</span> 的传感器而言，<span class="math-inline">\(0.2\text{ m}\)</span> 已经是两个标准差；对标准差为 <span class="math-inline">\(1.0\text{ m}\)</span> 的传感器而言，它却很常见。</p>
+<p>所以权重表达的是：残差放到该观测自身的不确定性尺度下，究竟有多异常。</p>
+<h2 id="10-从标量方差到协方差矩阵"><a href="#10-从标量方差到协方差矩阵" class="headerlink" title="10. 从标量方差到协方差矩阵"></a>10. 从标量方差到协方差矩阵</h2><p>SLAM 中的许多残差是向量，例如二维重投影残差、三维 GPS 位置残差，以及包含旋转、速度、位置和偏置的 IMU 预积分残差。</p>
+<p>设 <span class="math-inline">\(k\)</span> 维观测满足：</p>
+<div class="math-display">\[\mathbf z=h(\mathbf x)+\mathbf n,
+\qquad
+\mathbf n\sim\mathcal N(\mathbf 0,\boldsymbol\Sigma)\]</div>
+<p>定义 <span class="math-inline">\(\mathbf r(\mathbf x)=\mathbf z-h(\mathbf x)\)</span>，其条件概率密度为：</p>
+<div class="math-display">\[p(\mathbf z\mid\mathbf x)
+=
+\frac{1}{(2\pi)^{k/2}|\boldsymbol\Sigma|^{1/2}}
+\exp\left(
+-\frac{1}{2}
+\mathbf r^T\boldsymbol\Sigma^{-1}\mathbf r
+\right)\]</div>
+<p>在协方差已知且不依赖状态时，负对数似然中与状态有关的部分为：</p>
+<div class="math-display">\[F(\mathbf x)
+=
+\frac{1}{2}
+\mathbf r^T\boldsymbol\Sigma^{-1}\mathbf r\]</div>
+<p>定义信息矩阵：</p>
+<div class="math-display">\[\mathbf W=\boldsymbol\Sigma^{-1}\]</div>
+<p>就得到上一篇文章使用的 <span class="math-inline">\(\frac12\mathbf r^T\mathbf W\mathbf r\)</span>。</p>
+<h2 id="11-什么是协方差矩阵？"><a href="#11-什么是协方差矩阵？" class="headerlink" title="11. 什么是协方差矩阵？"></a>11. 什么是协方差矩阵？</h2><p>对二维残差 <span class="math-inline">\(\mathbf r=[r_x\;r_y]^T\)</span>，协方差矩阵可以写成：</p>
+<div class="math-display">\[\boldsymbol\Sigma
+=
+\begin{bmatrix}
+\sigma_x^2 &amp; \sigma_{xy}\\
+\sigma_{xy} &amp; \sigma_y^2
+\end{bmatrix}\]</div>
+<p>对角元素描述各方向自身的不确定性，非对角元素描述误差分量之间的相关性。</p>
+<h3 id="11-1-对角协方差"><a href="#11-1-对角协方差" class="headerlink" title="11.1 对角协方差"></a>11.1 对角协方差</h3><p>若 <span class="math-inline">\(\boldsymbol\Sigma=\operatorname{diag}(0.01,1)\)</span>，表示 <span class="math-inline">\(x\)</span> 方向精度高、<span class="math-inline">\(y\)</span> 方向精度低，且二者不相关。相同数值的残差在 <span class="math-inline">\(x\)</span> 方向会受到更强惩罚。</p>
+<h3 id="11-2-非对角协方差"><a href="#11-2-非对角协方差" class="headerlink" title="11.2 非对角协方差"></a>11.2 非对角协方差</h3><p>若 <span class="math-inline">\(\sigma_{xy}\neq0\)</span>，说明两个误差分量相关。例如二维位置误差可能沿某个斜方向扩散，此时需要使用完整的二次型，而不能只给每个坐标轴分别乘一个标量权重。</p>
+<figure class="probabilistic-estimation-figure probabilistic-estimation-figure-wide">
+  <img src="/images/nonlinear-optimization/16-covariance-information.png" alt="" aria-label="图 4 协方差描述误差椭圆，信息矩阵沿不确定性小的方向给予更强惩罚">
+</figure>
+
+<h2 id="12-什么是马氏距离？"><a href="#12-什么是马氏距离？" class="headerlink" title="12. 什么是马氏距离？"></a>12. 什么是马氏距离？</h2><p>欧氏距离平方 <span class="math-inline">\(\mathbf r^T\mathbf r\)</span> 默认所有方向具有相同尺度和可信度。马氏距离平方则考虑协方差：</p>
+<div class="math-display">\[d_M^2
+=
+\mathbf r^T\boldsymbol\Sigma^{-1}\mathbf r\]</div>
+<p>例如：</p>
+<div class="math-display">\[\mathbf r_A=\begin{bmatrix}1\\0\end{bmatrix},
+\qquad
+\mathbf r_B=\begin{bmatrix}0\\1\end{bmatrix},
+\qquad
+\boldsymbol\Sigma=
+\begin{bmatrix}0.01&amp;0\\0&amp;1\end{bmatrix}\]</div>
+<p>两个残差的欧氏长度相同，但马氏距离平方分别为：</p>
+<div class="math-display">\[d_{M,A}^2=100,
+\qquad
+d_{M,B}^2=1\]</div>
+<p>这说明 <span class="math-inline">\(x\)</span> 方向本来测得很准，偏差 1 非常异常；<span class="math-inline">\(y\)</span> 方向本来就不确定，同样的偏差没有那么离谱。SLAM 中基于卡方分布的门限检验，也建立在这种归一化创新量或马氏距离之上。</p>
+<h2 id="13-多种观测如何组成统一目标？"><a href="#13-多种观测如何组成统一目标？" class="headerlink" title="13. 多种观测如何组成统一目标？"></a>13. 多种观测如何组成统一目标？</h2><p>假设系统同时包含相机、LiDAR 和 GPS 观测，其最大似然目标可以写成：</p>
+<div class="math-display">\[\begin{aligned}
+F(\mathbf x)
+= {} &amp;
+\frac12\sum_i
+\mathbf r_{\text{cam},i}^T
+\boldsymbol\Sigma_{\text{cam},i}^{-1}
+\mathbf r_{\text{cam},i}\\
+&amp;+\frac12\sum_j
+\frac{r_{\text{lidar},j}^2}{\sigma_{\text{lidar},j}^2}\\
+&amp;+\frac12\sum_k
+\mathbf r_{\text{GPS},k}^T
+\boldsymbol\Sigma_{\text{GPS},k}^{-1}
+\mathbf r_{\text{GPS},k}
+\end{aligned}\]</div>
+<p>不同单位、维度和精度的观测，并不是把原始数值简单相加，而是在各自的不确定性尺度下被标准化后进入同一个概率框架。</p>
+<h2 id="14-MLE-不显式使用状态先验"><a href="#14-MLE-不显式使用状态先验" class="headerlink" title="14. MLE 不显式使用状态先验"></a>14. MLE 不显式使用状态先验</h2><p>最大似然估计只通过似然 <span class="math-inline">\(p(\mathbf z\mid\mathbf x)\)</span> 评价状态。这里的 <span class="math-inline">\(\mathbf z\)</span> 可以包含当前观测，也可以包含截至目前收集到的全部数据；MLE 的关键不是“只能使用当前帧”，而是目标中没有额外乘入状态先验 <span class="math-inline">\(p(\mathbf x)\)</span>。</p>
+<p>真实机器人通常已经掌握一些信息，例如 IMU 传播给出的预测、已标定参数的大致范围、偏置缓慢变化的规律，或滑动窗口边缘化后留下的信息。把这些知识显式纳入估计，就需要引入先验。</p>
+<h2 id="15-什么是先验概率？"><a href="#15-什么是先验概率？" class="headerlink" title="15. 什么是先验概率？"></a>15. 什么是先验概率？</h2><p>先验 <span class="math-inline">\(p(\mathbf x)\)</span> 表示在考虑当前这批观测之前，我们认为状态 <span class="math-inline">\(\mathbf x\)</span> 有多合理。若状态先验为：</p>
+<div class="math-display">\[\mathbf x\sim\mathcal N(\bar{\mathbf x},\mathbf P)\]</div>
+<p>则：</p>
+<div class="math-display">\[p(\mathbf x)
+\propto
+\exp\left[
+-\frac12
+(\mathbf x-\bar{\mathbf x})^T
+\mathbf P^{-1}
+(\mathbf x-\bar{\mathbf x})
+\right]\]</div>
+<p>定义先验残差 <span class="math-inline">\(\mathbf r_p=\mathbf x-\bar{\mathbf x}\)</span>，对应的负对数代价是：</p>
+<div class="math-display">\[F_p(\mathbf x)
+=
+\frac12
+\mathbf r_p^T\mathbf P^{-1}\mathbf r_p\]</div>
+<p>在旋转或位姿流形上，<span class="math-inline">\(\mathbf x-\bar{\mathbf x}\)</span> 应替换为相应的局部差分 <span class="math-inline">\(\boxminus\)</span>，而不是直接相减。</p>
+<h2 id="16-贝叶斯公式与最大后验估计"><a href="#16-贝叶斯公式与最大后验估计" class="headerlink" title="16. 贝叶斯公式与最大后验估计"></a>16. 贝叶斯公式与最大后验估计</h2><p>贝叶斯公式为：</p>
+<div class="math-display">\[p(\mathbf x\mid\mathbf z)
+=
+\frac{p(\mathbf z\mid\mathbf x)p(\mathbf x)}{p(\mathbf z)}\]</div>
+<p>最大后验估计（Maximum A Posteriori，MAP）寻找后验密度最大的状态：</p>
+<div class="math-display">\[\mathbf x^\star_{\text{MAP}}
+=
+\operatorname*{arg\,max}_{\mathbf x}
+p(\mathbf x\mid\mathbf z)\]</div>
+<p>因为证据项 <span class="math-inline">\(p(\mathbf z)\)</span> 与待估状态无关，所以：</p>
+<div class="math-display">\[\mathbf x^\star_{\text{MAP}}
+=
+\operatorname*{arg\,max}_{\mathbf x}
+p(\mathbf z\mid\mathbf x)p(\mathbf x)\]</div>
+<p>若观测似然和状态先验均为高斯模型，取负对数后得到：</p>
+<div class="math-display">\[\mathbf x^\star_{\text{MAP}}
+=
+\operatorname*{arg\,min}_{\mathbf x}
+\left[
+\frac12\mathbf r_z^T\mathbf R^{-1}\mathbf r_z
++
+\frac12\mathbf r_p^T\mathbf P^{-1}\mathbf r_p
+\right]\]</div>
+<p>也就是：</p>
+<div class="math-display">\[\boxed{
+\text{后验代价}
+=
+\text{观测代价}
++
+\text{先验代价}
+}\]</div>
+<figure class="probabilistic-estimation-figure probabilistic-estimation-figure-wide">
+  <img src="/images/nonlinear-optimization/17-mle-map-prior.png" alt="" aria-label="图 5 最大似然只使用似然项，最大后验将状态先验与观测似然融合为后验">
+</figure>
+
+<h2 id="17-用一个位置融合例子理解-MAP"><a href="#17-用一个位置融合例子理解-MAP" class="headerlink" title="17. 用一个位置融合例子理解 MAP"></a>17. 用一个位置融合例子理解 MAP</h2><p>假设运动模型给出的先验位置和标准差为：</p>
+<div class="math-display">\[\bar x=10.0\text{ m},
+\qquad
+\sigma_p=0.5\text{ m}\]</div>
+<p>GPS 测量和标准差为：</p>
+<div class="math-display">\[z=11.0\text{ m},
+\qquad
+\sigma_z=1.0\text{ m}\]</div>
+<p>MAP 代价函数为：</p>
+<div class="math-display">\[F(x)
+=
+\frac12\frac{(x-10.0)^2}{0.5^2}
++
+\frac12\frac{(11.0-x)^2}{1.0^2}\]</div>
+<p>对 <span class="math-inline">\(x\)</span> 求导并令其为零：</p>
+<div class="math-display">\[4(x-10)+(x-11)=0\]</div>
+<p>得到：</p>
+<div class="math-display">\[x^\star=10.2\text{ m}\]</div>
+<p>结果更接近先验 10.0 米，因为先验方差更小、信息量更大。这不是简单平均，而是不确定性加权后的融合。</p>
+<h2 id="18-MLE-与-MAP-有什么区别？"><a href="#18-MLE-与-MAP-有什么区别？" class="headerlink" title="18. MLE 与 MAP 有什么区别？"></a>18. MLE 与 MAP 有什么区别？</h2><p>最大似然估计回答：哪个状态最能解释观测数据？</p>
+<div class="math-display">\[\mathbf x^\star_{\text{MLE}}
+=
+\operatorname*{arg\,max}_{\mathbf x}
+p(\mathbf z\mid\mathbf x)\]</div>
+<p>最大后验估计回答：综合观测与已有先验后，哪个状态最合理？</p>
+<div class="math-display">\[\mathbf x^\star_{\text{MAP}}
+=
+\operatorname*{arg\,max}_{\mathbf x}
+p(\mathbf x\mid\mathbf z)\]</div>
+<p>当先验在所考虑的状态范围内为常数时：</p>
+<div class="math-display">\[p(\mathbf x\mid\mathbf z)
+\propto
+p(\mathbf z\mid\mathbf x)\]</div>
+<p>此时 MAP 与 MLE 的最优解相同。可以把 MLE 看成无信息先验下 MAP 的一个特例。</p>
+<h2 id="19-在-SLAM-中，什么是先验？"><a href="#19-在-SLAM-中，什么是先验？" class="headerlink" title="19. 在 SLAM 中，什么是先验？"></a>19. 在 SLAM 中，什么是先验？</h2><h3 id="19-1-固定第一帧与规范自由度"><a href="#19-1-固定第一帧与规范自由度" class="headerlink" title="19.1 固定第一帧与规范自由度"></a>19.1 固定第一帧与规范自由度</h3><p>仅凭相对观测构造的 BA 或位姿图通常存在规范自由度（gauge freedom）：对全部状态施加某种共同变换，残差仍不改变。固定第一帧主要是在选择坐标基准、消除不可观方向；它也可以通过极强先验因子实现，但“固定规范”与“来自真实统计知识的先验”在概念上并不完全相同。</p>
+<h3 id="19-2-IMU-传播先验"><a href="#19-2-IMU-传播先验" class="headerlink" title="19.2 IMU 传播先验"></a>19.2 IMU 传播先验</h3><p>视觉惯性或激光惯性系统可由上一时刻状态和 IMU 测量传播出当前预测状态与预测协方差，它们构成观测更新前的先验。</p>
+<h3 id="19-3-边缘化先验"><a href="#19-3-边缘化先验" class="headerlink" title="19.3 边缘化先验"></a>19.3 边缘化先验</h3><p>滑动窗口移除旧状态时，可通过 Schur 补把相关信息压缩成作用于保留状态的先验因子。它保留了被边缘化变量对当前窗口的局部信息。</p>
+<h3 id="19-4-标定参数先验"><a href="#19-4-标定参数先验" class="headerlink" title="19.4 标定参数先验"></a>19.4 标定参数先验</h3><p>若相机内参、外参或时间偏移已经较准确，可以加入合理强度的先验，避免弱可观方向发生不合理漂移。</p>
+<h3 id="19-5-运动与随机游走模型"><a href="#19-5-运动与随机游走模型" class="headerlink" title="19.5 运动与随机游走模型"></a>19.5 运动与随机游走模型</h3><p>速度连续、偏置缓慢随机游走、车辆近似平面运动等假设，也会通过过程模型、状态转移因子或软约束进入估计问题。</p>
+<h2 id="20-FAST-LIO2-中的先验和观测"><a href="#20-FAST-LIO2-中的先验和观测" class="headerlink" title="20. FAST-LIO2 中的先验和观测"></a>20. FAST-LIO2 中的先验和观测</h2><p>FAST-LIO2 的主体是迭代误差状态卡尔曼滤波。用局部 MAP 的视角看，一次更新需要同时考虑：</p>
+<ol>
+<li>IMU 传播得到的状态先验；</li>
+<li>LiDAR 点到平面的观测约束。</li>
+</ol>
+<p>在线性化点附近，可以用一个示意性的局部目标表示：</p>
+<div class="math-display">\[\min_{\delta\mathbf x}
+\frac12
+\lVert\delta\mathbf x-\delta\bar{\mathbf x}\rVert_{\mathbf P^{-1}}^2
++
+\frac12
+\lVert\mathbf r+\mathbf H\delta\mathbf x\rVert_{\mathbf R^{-1}}^2\]</div>
+<p>其中 <span class="math-inline">\(\mathbf P\)</span> 是传播先验协方差，<span class="math-inline">\(\mathbf R\)</span> 是观测噪声协方差，<span class="math-inline">\(\mathbf H\)</span> 是观测模型在当前迭代点的线性化矩阵。具体误差定义、流形更新与符号会随实现约定变化，但结构始终是在平衡传播先验和 LiDAR 观测。</p>
+<p>这解释了滤波和非线性优化为何会出现相似的二次型。不过 FAST-LIO2 仍属于递推滤波框架：它维护当前状态与协方差，而不是像滑动窗口优化那样同时保留多个历史状态。</p>
+<h2 id="21-BA-和因子图中的概率解释"><a href="#21-BA-和因子图中的概率解释" class="headerlink" title="21. BA 和因子图中的概率解释"></a>21. BA 和因子图中的概率解释</h2><p>BA 的典型目标为：</p>
+<div class="math-display">\[\min_{\{\mathbf T_i\},\{\mathbf P_j\}}
+\frac12
+\sum_{(i,j)}
+\mathbf r_{ij}^T
+\boldsymbol\Sigma_{ij}^{-1}
+\mathbf r_{ij}\]</div>
+<p>其中重投影残差可以写成：</p>
+<div class="math-display">\[\mathbf r_{ij}
+=
+\mathbf z_{ij}
+-
+\pi(\mathbf R_{cw,i}\mathbf P_j+\mathbf t_{cw,i})\]</div>
+<p>每个观测因子对应一个局部条件概率 <span class="math-inline">\(p(\mathbf z_{ij}\mid\mathbf T_i,\mathbf P_j)\)</span>。在给定状态后假设各测量条件独立，联合似然可分解为局部因子的乘积；取负对数后，乘积就变成局部残差代价的加和。</p>
+<p>因子图中的重投影因子、IMU 预积分因子、GPS 因子、回环因子和先验因子，都可以从“局部约束”与“局部概率模型”两个角度理解。</p>
+<h2 id="22-高斯噪声为什么导出平方损失？"><a href="#22-高斯噪声为什么导出平方损失？" class="headerlink" title="22. 高斯噪声为什么导出平方损失？"></a>22. 高斯噪声为什么导出平方损失？</h2><p>将核心推导集中写一次。假设：</p>
+<div class="math-display">\[\mathbf z=h(\mathbf x)+\mathbf n,
+\qquad
+\mathbf n\sim\mathcal N(\mathbf{0},\boldsymbol\Sigma)\]</div>
+<p>定义残差 <span class="math-inline">\(\mathbf r=\mathbf z-h(\mathbf x)\)</span>，则：</p>
+<div class="math-display">\[p(\mathbf z\mid\mathbf x)
+\propto
+\exp\left[
+-\frac12
+\mathbf r^T\boldsymbol\Sigma^{-1}\mathbf r
+\right]\]</div>
+<p>最大化似然等价于最小化负对数似然，因此：</p>
+<div class="math-display">\[\boxed{
+\mathbf x^\star_{\text{MLE}}
+=
+\operatorname*{arg\,min}_{\mathbf x}
+\frac12
+\mathbf r^T\boldsymbol\Sigma^{-1}\mathbf r
+}\]</div>
+<p>所以，高斯噪声自然导出加权平方损失。若噪声服从拉普拉斯分布，则绝对值损失更自然；重尾分布或混合模型会导出对大残差更温和的目标。</p>
+<h2 id="23-最小二乘怕什么？"><a href="#23-最小二乘怕什么？" class="headerlink" title="23. 最小二乘怕什么？"></a>23. 最小二乘怕什么？</h2><p>平方损失会快速放大大残差：<span class="math-inline">\(r=1\)</span> 时代价为 1，<span class="math-inline">\(r=10\)</span> 时则为 100。如果大残差真来自已建模的高斯噪声，强惩罚是模型的自然结果；但如果它来自错误匹配、动态车辆、错误回环或传感器故障，普通最小二乘就可能被严重拉偏。</p>
+<p>因此：</p>
+<blockquote>
+<p>最小二乘并不天然鲁棒，它依赖“误差近似高斯、外点较少且协方差建模合理”等假设。</p>
+</blockquote>
+<p>工程中通常会结合数据关联检查、门限剔除和 Huber、Cauchy 等鲁棒损失，减弱外点的影响。</p>
+<h2 id="24-常见误区"><a href="#24-常见误区" class="headerlink" title="24. 常见误区"></a>24. 常见误区</h2><h3 id="24-1-“密度最大”不等于概率为-1"><a href="#24-1-“密度最大”不等于概率为-1" class="headerlink" title="24.1 “密度最大”不等于概率为 1"></a>24.1 “密度最大”不等于概率为 1</h3><p>MLE 选择的是相对最能解释数据的状态，不意味着状态一定正确。对于连续变量，比较的通常还是概率密度；密度值甚至可以大于 1，它本身不是某个点事件的概率。</p>
+<h3 id="24-2-似然不是状态的概率分布"><a href="#24-2-似然不是状态的概率分布" class="headerlink" title="24.2 似然不是状态的概率分布"></a>24.2 似然不是状态的概率分布</h3><p>把观测固定后，<span class="math-inline">\(p(\mathbf z\mid\mathbf x)\)</span> 作为 <span class="math-inline">\(\mathbf x\)</span> 的函数叫似然，但不必对状态空间积分为 1。真正归一化的状态分布是后验 <span class="math-inline">\(p(\mathbf x\mid\mathbf z)\)</span>。</p>
+<h3 id="24-3-协方差不是一次残差的大小"><a href="#24-3-协方差不是一次残差的大小" class="headerlink" title="24.3 协方差不是一次残差的大小"></a>24.3 协方差不是一次残差的大小</h3><p>残差是当前估计下的一次观测差异，协方差则描述误差在重复试验或模型中的分散与相关结构，二者不能混为一谈。</p>
+<h3 id="24-4-权重不是越大越好"><a href="#24-4-权重不是越大越好" class="headerlink" title="24.4 权重不是越大越好"></a>24.4 权重不是越大越好</h3><p>权重过大表示系统过度相信某类观测。若该观测带有未建模的系统偏差，它会强行拉偏状态估计。</p>
+<h3 id="24-5-代价下降不代表概率模型正确"><a href="#24-5-代价下降不代表概率模型正确" class="headerlink" title="24.5 代价下降不代表概率模型正确"></a>24.5 代价下降不代表概率模型正确</h3><p>优化器可以在错误的数据关联、噪声模型和协方差设置下稳定收敛。数值收敛只说明它找到了当前目标函数的低点，不说明建模一定正确。</p>
+<h2 id="25-本篇总结"><a href="#25-本篇总结" class="headerlink" title="25. 本篇总结"></a>25. 本篇总结</h2><p>这篇文章从概率角度串起了最小二乘、最大似然和最大后验。</p>
+<p>高斯观测模型：</p>
+<div class="math-display">\[\mathbf z=h(\mathbf x)+\mathbf n,
+\qquad
+\mathbf n\sim\mathcal N(\mathbf{0},\boldsymbol\Sigma)\]</div>
+<p>会让最大似然估计等价于加权最小二乘：</p>
+<div class="math-display">\[\mathbf x^\star_{\text{MLE}}
+=
+\operatorname*{arg\,min}_{\mathbf x}
+\frac12\sum_i
+\mathbf r_i^T
+\boldsymbol\Sigma_i^{-1}
+\mathbf r_i\]</div>
+<p>加入高斯状态先验后，MAP 目标中会多出一个先验残差项：</p>
+<div class="math-display">\[\mathbf x^\star_{\text{MAP}}
+=
+\operatorname*{arg\,min}_{\mathbf x}
+\left[
+\frac12\mathbf r_z^T\mathbf R^{-1}\mathbf r_z
++
+\frac12\mathbf r_p^T\mathbf P^{-1}\mathbf r_p
+\right]\]</div>
+<figure class="probabilistic-estimation-figure probabilistic-estimation-figure-wide">
+  <img src="/images/nonlinear-optimization/18-ls-mle-map-summary.png" alt="" aria-label="图 6 高斯测量模型经最大似然得到加权最小二乘，加入状态先验后形成最大后验估计">
+</figure>
+
+<p>整条关系可以概括为：</p>
+<div class="math-display">\[\boxed{
+\text{平方损失来自高斯假设}
+\quad
+\text{权重来自协方差的逆}
+\quad
+\text{先验形成额外残差项}
+}\]</div>
+<p>最小二乘不是拍脑袋选出的数学技巧，而是在相应概率模型下进行状态估计的自然结果。</p>
+<h2 id="26-下一篇：非线性问题为什么需要线性化？"><a href="#26-下一篇：非线性问题为什么需要线性化？" class="headerlink" title="26. 下一篇：非线性问题为什么需要线性化？"></a>26. 下一篇：非线性问题为什么需要线性化？</h2><p>现在已经得到典型目标：</p>
+<div class="math-display">\[F(\mathbf x)
+=
+\frac12\sum_i
+\mathbf r_i^T\mathbf W_i\mathbf r_i\]</div>
+<p>但 SLAM 残差通常包含旋转、相机投影、坐标变换、除法和 IMU 状态传播，因此 <span class="math-inline">\(\mathbf r_i(\mathbf x)\)</span> 往往是非线性函数，无法像普通线性方程那样一次求解。</p>
+<p>优化器需要在当前状态附近把它暂时近似为线性模型：</p>
+<div class="math-display">\[\mathbf r(\mathbf x\boxplus\Delta\mathbf x)
+\approx
+\mathbf r(\mathbf x)
++
+\mathbf J\Delta\mathbf x\]</div>
+<p>这里会出现下一篇的两个核心概念：泰勒展开与雅可比矩阵。</p>
+<p>下一篇标题：</p>
+<blockquote>
+<p><a href="/2026/08/05/taylor-linearization-jacobian-slam-iteration/">《泰勒展开、线性化与雅可比：非线性问题为什么要反复求解？》</a></p>
+</blockquote>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://luomengwei.github.io/2026/08/03/least-squares-mle-map-robot-state-estimation/" data-id="cuidzWP5UQkuOjqb1HJ8wnsTv" data-title="最小二乘、最大似然与最大后验：为什么残差平方能够估计机器人状态？" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/SLAM/" rel="tag">SLAM</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E5%8D%8F%E6%96%B9%E5%B7%AE/" rel="tag">协方差</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E6%9C%80%E5%A4%A7%E4%BC%BC%E7%84%B6%E4%BC%B0%E8%AE%A1/" rel="tag">最大似然估计</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E6%9C%80%E5%A4%A7%E5%90%8E%E9%AA%8C%E4%BC%B0%E8%AE%A1/" rel="tag">最大后验估计</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E6%9C%80%E5%B0%8F%E4%BA%8C%E4%B9%98/" rel="tag">最小二乘</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/" rel="tag">非线性优化</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E9%AB%98%E6%96%AF%E5%88%86%E5%B8%83/" rel="tag">高斯分布</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2026/08/05/taylor-linearization-jacobian-slam-iteration/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">前一篇</strong>
+      <div class="article-nav-title">
+        
+          泰勒展开、线性化与雅可比：非线性问题为什么要反复求解？
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2026/08/01/slam-state-observation-prediction-residual-cost-function/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">后一篇</strong>
+      <div class="article-nav-title">状态、观测、预测、残差与代价函数：SLAM 优化问题是怎么构造出来的？</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分类</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM/">SLAM</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/">状态估计</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/">非线性优化</a></li></ul></li><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/">SLAM学习笔记</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%95%B0%E5%AD%A6%E5%9F%BA%E7%A1%80/">数学基础</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%95%B0%E5%AD%A6%E5%9F%BA%E7%A1%80/%E4%BC%98%E5%8C%96%E6%96%B9%E6%B3%95/">优化方法</a></li></ul></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/CKF/" rel="tag">CKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/EKF/" rel="tag">EKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESKF/" rel="tag">ESKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/FAST-LIO2/" rel="tag">FAST-LIO2</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Hessian/" rel="tag">Hessian</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IEKF/" rel="tag">IEKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IESKF/" rel="tag">IESKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Jacobian/" rel="tag">Jacobian</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/KF/" rel="tag">KF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LiDAR-IMU/" rel="tag">LiDAR-IMU</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SLAM/" rel="tag">SLAM</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/UKF/" rel="tag">UKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%BB%A3%E4%BB%B7%E5%87%BD%E6%95%B0/" rel="tag">代价函数</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%BC%98%E5%8C%96/" rel="tag">优化</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" rel="tag">传感器融合</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%8D%8F%E6%96%B9%E5%B7%AE/" rel="tag">协方差</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%A4%9A%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" rel="tag">多传感器融合</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">扩展卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%80%E5%A4%A7%E4%BC%BC%E7%84%B6%E4%BC%B0%E8%AE%A1/" rel="tag">最大似然估计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%80%E5%A4%A7%E5%90%8E%E9%AA%8C%E4%BC%B0%E8%AE%A1/" rel="tag">最大后验估计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%80%E5%B0%8F%E4%BA%8C%E4%B9%98/" rel="tag">最小二乘</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA/" rel="tag">机器人</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA%E5%AE%9A%E4%BD%8D/" rel="tag">机器人定位</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%A2%AF%E5%BA%A6/" rel="tag">梯度</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%A2%AF%E5%BA%A6%E4%B8%8B%E9%99%8D/" rel="tag">梯度下降</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%AE%8B%E5%B7%AE/" rel="tag">残差</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%B3%B0%E5%8B%92%E5%B1%95%E5%BC%80/" rel="tag">泰勒展开</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%BF%80%E5%85%89%E6%83%AF%E6%80%A7%E9%87%8C%E7%A8%8B%E8%AE%A1/" rel="tag">激光惯性里程计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%89%9B%E9%A1%BF%E6%B3%95/" rel="tag">牛顿法</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/" rel="tag">状态估计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%B2%92%E5%AD%90%E6%BB%A4%E6%B3%A2/" rel="tag">粒子滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%BA%BF%E6%80%A7%E5%8C%96/" rel="tag">线性化</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E8%AF%AF%E5%B7%AE%E7%8A%B6%E6%80%81%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">误差状态卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E8%BF%AD%E4%BB%A3%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">迭代扩展卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%9B%85%E5%8F%AF%E6%AF%94/" rel="tag">雅可比</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/" rel="tag">非线性优化</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%AB%98%E6%96%AF%E5%88%86%E5%B8%83/" rel="tag">高斯分布</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签云</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/CKF/" style="font-size: 10px;">CKF</a> <a href="/tags/EKF/" style="font-size: 10px;">EKF</a> <a href="/tags/ESKF/" style="font-size: 11.67px;">ESKF</a> <a href="/tags/FAST-LIO2/" style="font-size: 15px;">FAST-LIO2</a> <a href="/tags/Hessian/" style="font-size: 11.67px;">Hessian</a> <a href="/tags/IEKF/" style="font-size: 11.67px;">IEKF</a> <a href="/tags/IESKF/" style="font-size: 13.33px;">IESKF</a> <a href="/tags/Jacobian/" style="font-size: 10px;">Jacobian</a> <a href="/tags/KF/" style="font-size: 10px;">KF</a> <a href="/tags/LiDAR-IMU/" style="font-size: 11.67px;">LiDAR-IMU</a> <a href="/tags/SLAM/" style="font-size: 20px;">SLAM</a> <a href="/tags/UKF/" style="font-size: 10px;">UKF</a> <a href="/tags/%E4%BB%A3%E4%BB%B7%E5%87%BD%E6%95%B0/" style="font-size: 10px;">代价函数</a> <a href="/tags/%E4%BC%98%E5%8C%96/" style="font-size: 11.67px;">优化</a> <a href="/tags/%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" style="font-size: 10px;">传感器融合</a> <a href="/tags/%E5%8D%8F%E6%96%B9%E5%B7%AE/" style="font-size: 10px;">协方差</a> <a href="/tags/%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 16.67px;">卡尔曼滤波</a> <a href="/tags/%E5%A4%9A%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" style="font-size: 10px;">多传感器融合</a> <a href="/tags/%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">扩展卡尔曼滤波</a> <a href="/tags/%E6%9C%80%E5%A4%A7%E4%BC%BC%E7%84%B6%E4%BC%B0%E8%AE%A1/" style="font-size: 10px;">最大似然估计</a> <a href="/tags/%E6%9C%80%E5%A4%A7%E5%90%8E%E9%AA%8C%E4%BC%B0%E8%AE%A1/" style="font-size: 10px;">最大后验估计</a> <a href="/tags/%E6%9C%80%E5%B0%8F%E4%BA%8C%E4%B9%98/" style="font-size: 13.33px;">最小二乘</a> <a href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA/" style="font-size: 10px;">机器人</a> <a href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA%E5%AE%9A%E4%BD%8D/" style="font-size: 13.33px;">机器人定位</a> <a href="/tags/%E6%A2%AF%E5%BA%A6/" style="font-size: 11.67px;">梯度</a> <a href="/tags/%E6%A2%AF%E5%BA%A6%E4%B8%8B%E9%99%8D/" style="font-size: 10px;">梯度下降</a> <a href="/tags/%E6%AE%8B%E5%B7%AE/" style="font-size: 10px;">残差</a> <a href="/tags/%E6%B3%B0%E5%8B%92%E5%B1%95%E5%BC%80/" style="font-size: 13.33px;">泰勒展开</a> <a href="/tags/%E6%BF%80%E5%85%89%E6%83%AF%E6%80%A7%E9%87%8C%E7%A8%8B%E8%AE%A1/" style="font-size: 10px;">激光惯性里程计</a> <a href="/tags/%E7%89%9B%E9%A1%BF%E6%B3%95/" style="font-size: 11.67px;">牛顿法</a> <a href="/tags/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/" style="font-size: 18.33px;">状态估计</a> <a href="/tags/%E7%B2%92%E5%AD%90%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">粒子滤波</a> <a href="/tags/%E7%BA%BF%E6%80%A7%E5%8C%96/" style="font-size: 10px;">线性化</a> <a href="/tags/%E8%AF%AF%E5%B7%AE%E7%8A%B6%E6%80%81%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">误差状态卡尔曼滤波</a> <a href="/tags/%E8%BF%AD%E4%BB%A3%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">迭代扩展卡尔曼滤波</a> <a href="/tags/%E9%9B%85%E5%8F%AF%E6%AF%94/" style="font-size: 10px;">雅可比</a> <a href="/tags/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/" style="font-size: 15px;">非线性优化</a> <a href="/tags/%E9%AB%98%E6%96%AF%E5%88%86%E5%B8%83/" style="font-size: 10px;">高斯分布</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">归档</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/08/">八月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/07/">七月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/06/">六月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/05/">五月 2026</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/08/05/taylor-linearization-jacobian-slam-iteration/">泰勒展开、线性化与雅可比：非线性问题为什么要反复求解？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/08/03/least-squares-mle-map-robot-state-estimation/">最小二乘、最大似然与最大后验：为什么残差平方能够估计机器人状态？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/08/01/slam-state-observation-prediction-residual-cost-function/">状态、观测、预测、残差与代价函数：SLAM 优化问题是怎么构造出来的？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/07/29/why-robots-need-nonlinear-optimization/">机器人为什么离不开非线性优化？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/07/28/ukf-ckf-particle-filter-overview/">除了 EKF，还有哪些滤波方法？UKF、CKF、粒子滤波简单聊聊</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 Tomato<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+<script>window.MathJax = {  tex: {    inlineMath: [['\\(', '\\)']],    displayMath: [['\\[', '\\]']],    processEscapes: true  },  options: {    skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']  },  chtml: {    scale: 1.08  }};</script><script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script></body>
+</html>

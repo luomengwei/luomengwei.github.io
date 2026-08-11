@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>除了 EKF，还有哪些滤波方法？UKF、CKF、粒子滤波简单聊聊 | Tomato&#39;s Blog</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="从 EKF 横向展开，理解 UKF、CKF 和粒子滤波处理非线性与不确定性的不同思路，以及它们各自适合的机器人状态估计场景。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="除了 EKF，还有哪些滤波方法？UKF、CKF、粒子滤波简单聊聊">
+<meta property="og:url" content="https://luomengwei.github.io/2026/07/28/ukf-ckf-particle-filter-overview/index.html">
+<meta property="og:site_name" content="Tomato&#39;s Blog">
+<meta property="og:description" content="从 EKF 横向展开，理解 UKF、CKF 和粒子滤波处理非线性与不确定性的不同思路，以及它们各自适合的机器人状态估计场景。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://luomengwei.github.io/images/filter-methods-overview/state-estimation-methods-overview.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/filter-methods-overview/ekf-vs-ukf-nonlinearity.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/filter-methods-overview/ekf-ukf-ckf-comparison.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/filter-methods-overview/particle-filter-process.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/filter-methods-overview/filter-method-selection.png">
+<meta property="article:published_time" content="2026-07-29T13:00:00.000Z">
+<meta property="article:modified_time" content="2026-08-10T14:53:18.231Z">
+<meta property="article:author" content="Tomato">
+<meta property="article:tag" content="CKF">
+<meta property="article:tag" content="SLAM">
+<meta property="article:tag" content="UKF">
+<meta property="article:tag" content="卡尔曼滤波">
+<meta property="article:tag" content="状态估计">
+<meta property="article:tag" content="粒子滤波">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://luomengwei.github.io/images/filter-methods-overview/state-estimation-methods-overview.png">
+  
+    <link rel="alternate" href="/atom.xml" title="Tomato's Blog" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
+
+<!-- hexo injector head_end start --><link rel="stylesheet" href="/css/custom.css"><!-- hexo injector head_end end --><meta name="generator" content="Hexo 8.1.2"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Tomato&#39;s Blog</a>
+      </h1>
+      
+        <h2 id="subtitle-wrap">
+          <a href="/" id="subtitle">Robotics, SLAM and LiDAR-IMU Notes</a>
+        </h2>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS 订阅"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="搜索"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜索"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://luomengwei.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-ukf-ckf-particle-filter-overview" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/07/28/ukf-ckf-particle-filter-overview/" class="article-date">
+  <time class="dt-published" datetime="2026-07-29T13:00:00.000Z" itemprop="datePublished">2026-07-29</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/SLAM/">SLAM</a>►<a class="article-category-link" href="/categories/SLAM/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/">状态估计</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      除了 EKF，还有哪些滤波方法？UKF、CKF、粒子滤波简单聊聊
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>前面几篇笔记沿着 KF、EKF、ESKF、IEKF，一直写到了 FAST-LIO2 中的 IESKF。这一篇暂时离开纵向主线，从横向看看 UKF、CKF 和粒子滤波分别在解决什么问题。</p>
+<span id="more"></span>
+
+<style>
+.filter-note-figure {
+  margin: 1.5em auto 1.8em;
+  text-align: center;
+}
+.filter-note-figure img {
+  display: block;
+  width: 68%;
+  max-width: 760px;
+  height: auto;
+  margin: 0 auto;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.filter-note-figure-wide img {
+  width: 76%;
+  max-width: 860px;
+}
+.filter-note-figure figcaption {
+  display: none;
+}
+@media (max-width: 720px) {
+  .filter-note-figure img,
+  .filter-note-figure-wide img {
+    width: 100%;
+  }
+}
+</style>
+
+<p>前几篇走的是一条很明确的路线：KF 处理线性系统，EKF 用雅可比应付非线性，ESKF 把名义状态和误差状态分开，IEKF 在同一帧观测里反复修正。到了 FAST-LIO2，这几件事又组合成了 IESKF。</p>
+<p>顺着这条线学下去，很容易产生一种错觉，好像机器人状态估计就是 EKF 家族一路往下延伸。可论文和工程里还经常出现 UKF、CKF、PF、AMCL，它们显然不只是换了个缩写。</p>
+<p>我想在这篇里把这些名字横着摆在一起看一遍。公式只保留理解思路需要的部分，主要弄清两件事：它们怎样处理非线性，又怎样描述状态的不确定性。</p>
+<h2 id="1-为什么还需要别的滤波方法？"><a href="#1-为什么还需要别的滤波方法？" class="headerlink" title="1. 为什么还需要别的滤波方法？"></a>1. 为什么还需要别的滤波方法？</h2><p>EKF 最关键的一步，是在当前估计点附近把非线性模型展开成线性模型：</p>
+<blockquote>
+<p>EKF 的核心是局部线性化。</p>
+</blockquote>
+<p>这套方法成熟、快，很多系统都在用。麻烦也恰好出在“局部线性化”这四个字上。</p>
+<h3 id="1-1-雅可比并不总是好推"><a href="#1-1-雅可比并不总是好推" class="headerlink" title="1.1 雅可比并不总是好推"></a>1.1 雅可比并不总是好推</h3><p>一维、二维的模型还比较好算。到了三维状态估计，姿态、位置、速度、IMU bias、重力和外参都可能进入状态，观测里又夹着相机投影、点云残差和坐标变换，雅可比很快就会长到让人不想手算。</p>
+<p>这类推导还有一个让人头疼的地方：写错了未必报错。扰动方向反了、坐标系约定混了，程序照样能跑，只是结果一直差一点。排查时往往比编译错误难受得多。</p>
+<h3 id="1-2-一阶近似不一定足够准确"><a href="#1-2-一阶近似不一定足够准确" class="headerlink" title="1.2 一阶近似不一定足够准确"></a>1.2 一阶近似不一定足够准确</h3><p>EKF 用的是一阶近似。当前估计离真值很近时，这条切线通常够用；初值偏得远，或者模型本身弯得厉害，切线就未必还能代表原来的函数。</p>
+<p>我更愿意把它想成用直尺量弯路：脚下这一小段看不出问题，沿着这条直线往远处推，偏差会越来越明显。</p>
+<h3 id="1-3-有些分布不是单峰高斯"><a href="#1-3-有些分布不是单峰高斯" class="headerlink" title="1.3 有些分布不是单峰高斯"></a>1.3 有些分布不是单峰高斯</h3><p>卡尔曼滤波习惯用一个均值和一个协方差描述状态，这很适合“我大概就在这里附近”的情况。</p>
+<p>全局定位却可能同时保留好几个答案。机器人刚在一条重复结构的走廊里开机，地图上的 A、B、C 三处都和当前激光扫描很像。这时硬用一个均值把三处位置揉在一起，得到的中心甚至可能落在一个完全不可能的位置上。</p>
+<p>粒子滤波就是为这种多假设分布留出空间的。把几类常见方法放在一张图里，大致关系如下：</p>
+<figure class="filter-note-figure filter-note-figure-wide">
+  <img src="/images/filter-methods-overview/state-estimation-methods-overview.png" alt="" aria-label="图 1 常见状态估计方法的大致关系">
+</figure>
+
+<p>这张图只用来理清位置，不算严格分类。左边这些方法大多还在均值和协方差的框架里工作；右边的粒子滤波直接保存一批带权假设，能表示更复杂的分布。</p>
+<h2 id="2-UKF：不求雅可比，让代表点通过非线性函数"><a href="#2-UKF：不求雅可比，让代表点通过非线性函数" class="headerlink" title="2. UKF：不求雅可比，让代表点通过非线性函数"></a>2. UKF：不求雅可比，让代表点通过非线性函数</h2><p>UKF 全称 Unscented Kalman Filter，中文一般叫无迹卡尔曼滤波。它也处理非线性系统，但没有沿用 EKF 的雅可比路线。</p>
+<p>EKF 会在当前估计点附近画一条切线：</p>
+<blockquote>
+<p>在当前估计点附近求雅可比，用一阶线性模型近似非线性函数。</p>
+</blockquote>
+<p>UKF 不画这条切线。它在均值周围挑出一组有代表性的点，也就是 <strong>Sigma Points</strong>，让这些点真的经过非线性函数，再从变换后的点恢复新的均值和协方差。</p>
+<p>一个是在函数附近做近似，一个是把代表点送进函数里跑一遍。图 2 画的就是这个差别：</p>
+<figure class="filter-note-figure">
+  <img src="/images/filter-methods-overview/ekf-vs-ukf-nonlinearity.png" alt="" aria-label="图 2 EKF 和 UKF 处理非线性的方式不同">
+</figure>
+
+<p>两边最后都要算出预测后的均值和协方差，区别在中间这一步怎么近似非线性。看懂这张图以后，UKF 的名字先不用背，记住“选点再传播”就够了。</p>
+<h2 id="3-Sigma-Points-与无迹变换"><a href="#3-Sigma-Points-与无迹变换" class="headerlink" title="3. Sigma Points 与无迹变换"></a>3. Sigma Points 与无迹变换</h2><p>设当前状态近似服从高斯分布，均值为 <span class="math-inline">\(\mu\)</span>，协方差为 <span class="math-inline">\(P\)</span>。Sigma Points 不是随机采样，而是根据 <span class="math-inline">\(\mu\)</span> 和 <span class="math-inline">\(P\)</span> 按固定规则放置，用少量点覆盖分布中心和主要扩展方向。常见的标准 UKF 会选 <span class="math-inline">\(2n+1\)</span> 个点，<span class="math-inline">\(n\)</span> 是状态维度。</p>
+<p>这些点分别经过状态函数：</p>
+<div class="math-display">\[x_i' = f(x_i)\]</div>
+<p>碰到非线性观测，再经过观测函数：</p>
+<div class="math-display">\[z_i = h(x_i')\]</div>
+<p>传播结束后，再按权重把这些点合成新的均值、协方差和交叉协方差。无迹变换做的就是这件事。</p>
+<p>Sigma Point 的权重和缩放参数这次先不展开。我给自己留下的记法很短：</p>
+<blockquote>
+<p>选一组能代表当前高斯分布的点，让它们穿过非线性函数，再把新的分布拼回来。</p>
+</blockquote>
+<h2 id="4-UKF-和-EKF-谁更好？"><a href="#4-UKF-和-EKF-谁更好？" class="headerlink" title="4. UKF 和 EKF 谁更好？"></a>4. UKF 和 EKF 谁更好？</h2><p>刚接触 UKF 时，我最容易误会的一点是：不用手推雅可比，似乎实现起来就一定更轻松。实际只是把成本换了个地方。</p>
+<p>EKF 要维护雅可比，单次传播和更新通常比较省；UKF 省掉了显式雅可比，却要传播多组 Sigma Points，再重建协方差。状态维度一高，这部分开销就会跟着上来，数值稳定性也不是自动解决的。</p>
+<p>LiDAR-IMU 正好是高维、高频的场景。状态里有姿态、位置、速度、IMU bias、重力和外参，一次 LiDAR 更新还带着大量点云残差。要是每个 Sigma Point 都跑一遍昂贵的传播或观测计算，实时性很快就吃不消。</p>
+<p>所以这里没有“UKF 一定比 EKF 准”或者“EKF 一定比 UKF 快”的通用答案。模型有多弯、状态有多大、雅可比是否可控，都会改变选择。FAST-LIO2 这类系统采用 ESKF、IEKF 或 IESKF，更多是工程结构和计算预算共同作用的结果。</p>
+<h2 id="5-CKF：用容积规则近似高斯积分"><a href="#5-CKF：用容积规则近似高斯积分" class="headerlink" title="5. CKF：用容积规则近似高斯积分"></a>5. CKF：用容积规则近似高斯积分</h2><p>CKF 全称 Cubature Kalman Filter，也就是容积卡尔曼滤波。第一次看到它时很容易和 UKF 混在一起，因为两者都不显式求雅可比，也都要传播一组确定性的点。</p>
+<p>差别藏在怎么选点：</p>
+<ul>
+<li><strong>UKF</strong> 使用无迹变换构造 Sigma Points，并通过相应权重重构统计量。</li>
+<li><strong>CKF</strong> 通常使用三阶球面-径向容积规则，以一组对称的容积点近似高斯加权积分。</li>
+</ul>
+<p>经典三阶 CKF 对 <span class="math-inline">\(n\)</span> 维状态通常取 <span class="math-inline">\(2n\)</span> 个容积点。背后的问题是非线性高斯积分不好直接算，于是用一组对称点去近似积分结果。</p>
+<p>我暂时把它记成：</p>
+<blockquote>
+<p>CKF 与 UKF 都通过代表点传播处理非线性，但它们构造代表点和近似高斯积分的规则不同。</p>
+</blockquote>
+<h2 id="6-EKF、UKF-与-CKF-的横向区别"><a href="#6-EKF、UKF-与-CKF-的横向区别" class="headerlink" title="6. EKF、UKF 与 CKF 的横向区别"></a>6. EKF、UKF 与 CKF 的横向区别</h2><p>把三种方法并排放在一起，差别会直观很多：</p>
+<figure class="filter-note-figure filter-note-figure-wide">
+  <img src="/images/filter-methods-overview/ekf-ukf-ckf-comparison.png" alt="" aria-label="图 3 EKF、UKF、CKF 的直观区别">
+</figure>
+
+<p>图里的三列刚好对应三种近似办法：</p>
+<ul>
+<li><strong>EKF</strong>：在当前点求雅可比，使用局部线性化。</li>
+<li><strong>UKF</strong>：选取 Sigma Points，让代表点经过非线性传播。</li>
+<li><strong>CKF</strong>：使用容积点，近似非线性函数下的高斯积分。</li>
+</ul>
+<p>UKF 和 CKF 只是绕开了显式雅可比，并没有把计算量一起抹掉。状态维度高、模型传播贵、观测又多时，代表点也会变成负担。要是雅可比确实难推，状态规模又不大，UKF 或 CKF 才更有吸引力。</p>
+<h2 id="7-PF：不再只用一个高斯分布描述状态"><a href="#7-PF：不再只用一个高斯分布描述状态" class="headerlink" title="7. PF：不再只用一个高斯分布描述状态"></a>7. PF：不再只用一个高斯分布描述状态</h2><p>PF 是 Particle Filter，也就是粒子滤波。它不属于卡尔曼滤波家族，只是同样在做递推状态估计，所以经常被放到一起比较。</p>
+<p>卡尔曼滤波会把状态压缩成均值和协方差，大致表达成：</p>
+<blockquote>
+<p>当前状态大概集中在某个位置附近，误差范围近似为一个椭圆。</p>
+</blockquote>
+<p>粒子滤波不做这种压缩。它保留许多带权粒子，每个粒子是一种可能状态，权重表示这个状态能不能解释当前观测。</p>
+<p>能解释观测的粒子权重变大，对不上观测的粒子权重变小。预测、打分、重采样循环几轮以后，粒子会慢慢聚到更可能的位置。</p>
+<p>这个过程很像：</p>
+<blockquote>
+<p>先保留一组可能答案，再不断利用运动和观测淘汰不符合现实的答案。</p>
+</blockquote>
+<h2 id="8-粒子滤波的基本流程"><a href="#8-粒子滤波的基本流程" class="headerlink" title="8. 粒子滤波的基本流程"></a>8. 粒子滤波的基本流程</h2><p>按算法顺序展开，粒子滤波大致会走这几步：</p>
+<ol>
+<li>根据先验分布初始化一组粒子。</li>
+<li>使用运动模型预测每个粒子的新状态。</li>
+<li>根据传感器观测计算每个粒子的似然与权重。</li>
+<li>对权重进行归一化。</li>
+<li>根据有效粒子数等条件执行重采样。</li>
+<li>使用粒子集合及其权重表示当前后验分布。</li>
+<li>进入下一轮预测与更新。</li>
+</ol>
+<p>图 4 把一轮预测和更新画得很完整：</p>
+<figure class="filter-note-figure filter-note-figure-wide">
+  <img src="/images/filter-methods-overview/particle-filter-process.png" alt="" aria-label="图 4 粒子滤波的基本流程">
+</figure>
+
+<p>图中圆点越大，权重越高。重采样不是把粒子简单删掉一批，而是让高权重区域获得更多样本，低权重区域逐渐淡出。几轮下来，粒子集合就会向更可信的状态收缩。</p>
+<p>同时存在多个可信区域时，粒子也可以分成几簇。这个能力是单个均值和协方差很难提供的。</p>
+<h2 id="9-AMCL-为什么常用粒子滤波？"><a href="#9-AMCL-为什么常用粒子滤波？" class="headerlink" title="9. AMCL 为什么常用粒子滤波？"></a>9. AMCL 为什么常用粒子滤波？</h2><p>AMCL 全称 Adaptive Monte Carlo Localization，即自适应蒙特卡洛定位。它常用于二维移动机器人在已知地图中的定位，底层正是粒子滤波。</p>
+<p>机器人刚启动时，可能只知道地图，却不知道自己在地图的哪一块。激光雷达扫到的局部结构又可能在多个区域重复，于是几种位置假设会同时存在：</p>
+<ul>
+<li>一部分粒子位于候选区域 A。</li>
+<li>一部分粒子位于候选区域 B。</li>
+<li>另一部分粒子位于候选区域 C。</li>
+</ul>
+<p>机器人继续运动，新的激光观测不断进来，错误区域越来越难解释这些观测，粒子就逐渐向正确区域集中。</p>
+<p>“机器人绑架问题”也是同一类麻烦：机器人被突然搬到另一处，定位系统并不知道位姿发生了跳变。只保留单个高斯分布时，很容易困在原来的位置附近；粒子滤波还能重新铺开多个假设，恢复全局位置的机会更大。</p>
+<h2 id="10-粒子滤波的代价"><a href="#10-粒子滤波的代价" class="headerlink" title="10. 粒子滤波的代价"></a>10. 粒子滤波的代价</h2><p>能保留多个答案很有用，代价也不小。</p>
+<h3 id="10-1-高维状态下容易遭遇维度灾难"><a href="#10-1-高维状态下容易遭遇维度灾难" class="headerlink" title="10.1 高维状态下容易遭遇维度灾难"></a>10.1 高维状态下容易遭遇维度灾难</h3><p>二维定位常见的状态只有 <span class="math-inline">\(x\)</span>、<span class="math-inline">\(y\)</span> 和航向角 <span class="math-inline">\(\mathrm{yaw}\)</span>，一定数量的粒子还能把这个空间铺开。三维 LiDAR-IMU 的状态就大得多：</p>
+<ul>
+<li>三维姿态与位置。</li>
+<li>三维速度。</li>
+<li>陀螺仪和加速度计 bias。</li>
+<li>重力方向或重力向量。</li>
+<li>LiDAR 与 IMU 外参。</li>
+</ul>
+<p>每多一个维度，粒子都要在新的方向上继续覆盖。数量不够时容易漏掉真值，数量加上去又会拖垮计算，这就是这里说的维度灾难。</p>
+<h3 id="10-2-实时计算压力大"><a href="#10-2-实时计算压力大" class="headerlink" title="10.2 实时计算压力大"></a>10.2 实时计算压力大</h3><p>每个粒子都要预测、打分。换成 LiDAR 观测，打分可能还意味着做地图匹配。一帧点云本来就会构建大量几何残差，再把这套计算乘上粒子数，高频实时运行很难扛住。</p>
+<h3 id="10-3-粒子退化与样本贫化"><a href="#10-3-粒子退化与样本贫化" class="headerlink" title="10.3 粒子退化与样本贫化"></a>10.3 粒子退化与样本贫化</h3><p>更新几轮后，权重可能集中到很少几个粒子上，其余粒子几乎不起作用，这叫粒子退化。</p>
+<p>重采样能把计算资源挪回高权重区域，但做得太频繁，粒子会越来越像，多样性反而丢掉了，也就是样本贫化。运动模型、观测模型、提议分布和重采样策略，任何一项没处理好，都可能让粒子提前押错答案。</p>
+<h2 id="11-为什么-FAST-LIO2-不常用粒子滤波？"><a href="#11-为什么-FAST-LIO2-不常用粒子滤波？" class="headerlink" title="11. 为什么 FAST-LIO2 不常用粒子滤波？"></a>11. 为什么 FAST-LIO2 不常用粒子滤波？</h2><p>粒子滤波这么灵活，FAST-LIO2 为什么没有选它？把前面的代价代入 LIO，就能看出原因。</p>
+<p>FAST-LIO2 维护的是高维连续状态。姿态、位置、速度、IMU bias、重力和外参放在一起，想用粒子覆盖这个空间，数量会很快失控。</p>
+<p>LiDAR 更新又不是一个简单标量观测。一帧点云里有许多有效点，近邻搜索、平面拟合和残差计算本来就占时间；每个粒子再独立做一遍，计算量基本无法接受。</p>
+<p>而且 LIO 并不是每帧都在做全局重定位。上一帧状态还在，IMU 也会持续给出高频预测，它面对的问题其实是：</p>
+<blockquote>
+<p>已经大致知道上一时刻的状态，现在需要连续、快速、精确地估计下一时刻。</p>
+</blockquote>
+<p>既然已经有一个不错的初值，就没必要长期养着一大群全局位置假设。IESKF 利用这个连续初值和局部几何约束，在误差状态空间里迭代修正，计算规模更适合高频运行。</p>
+<p>这不是粒子滤波能力不够，而是两边的问题类型不同：AMCL 更需要保留多个全局位置假设，FAST-LIO2 更在意局部状态能不能连续、快速地更新。</p>
+<h2 id="12-不同方法适合什么场景？"><a href="#12-不同方法适合什么场景？" class="headerlink" title="12. 不同方法适合什么场景？"></a>12. 不同方法适合什么场景？</h2><p>回头看这些方法，我觉得按任务类型来记比按名字背更省事：</p>
+<figure class="filter-note-figure filter-note-figure-wide">
+  <img src="/images/filter-methods-overview/filter-method-selection.png" alt="" aria-label="图 5 不同滤波方法的适用场景">
+</figure>
+
+<p>图里的连线不是硬性规定，只表示常见选择。线性模型自然想到 KF；一般非线性系统会比较 EKF、UKF 和 CKF；姿态与 IMU 常见 ESKF；scan-to-map 这类观测会用到迭代更新；全局定位和多峰分布则经常交给粒子滤波。</p>
+<p>放到同一张表里对照：</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>核心思想</th>
+<th>主要优点</th>
+<th>主要代价</th>
+<th>常见场景</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>KF</td>
+<td>线性系统中的预测与修正</td>
+<td>结构简单、计算快</td>
+<td>不能直接处理非线性模型</td>
+<td>简单位置与速度估计</td>
+</tr>
+<tr>
+<td>EKF</td>
+<td>对非线性模型做局部线性化</td>
+<td>工程成熟、计算可控</td>
+<td>需要雅可比，对线性化点敏感</td>
+<td>机器人定位、传感器融合</td>
+</tr>
+<tr>
+<td>ESKF</td>
+<td>估计误差状态并注入名义状态</td>
+<td>适合姿态和 IMU</td>
+<td>误差定义、注入和重置要一致</td>
+<td>VIO、LIO、惯性导航</td>
+</tr>
+<tr>
+<td>IEKF</td>
+<td>在同一帧观测内迭代线性化</td>
+<td>可减小观测线性化误差</td>
+<td>单帧计算量增加</td>
+<td>scan-to-map、强非线性观测</td>
+</tr>
+<tr>
+<td>UKF</td>
+<td>传播 Sigma Points</td>
+<td>不需要显式雅可比</td>
+<td>高维状态下传播成本增加</td>
+<td>中低维非线性系统</td>
+</tr>
+<tr>
+<td>CKF</td>
+<td>用容积点近似高斯积分</td>
+<td>不需要显式雅可比</td>
+<td>工程应用相对少，仍有多点传播成本</td>
+<td>非线性滤波研究与应用</td>
+</tr>
+<tr>
+<td>PF</td>
+<td>用带权粒子表示后验分布</td>
+<td>能表达非高斯与多峰分布</td>
+<td>高维计算量大，存在退化问题</td>
+<td>AMCL、全局定位、重定位</td>
+</tr>
+</tbody></table>
+<p>这些方法不是按版本号排列的，也没有哪一个能把其余方法全部替掉。选型时真正要看的，是状态维度、分布形状、模型结构和实时性预算。</p>
+<h2 id="13-从系列主线看这些方法"><a href="#13-从系列主线看这些方法" class="headerlink" title="13. 从系列主线看这些方法"></a>13. 从系列主线看这些方法</h2><p>前面几篇沿着 LiDAR-IMU SLAM 的需求，走出了这条纵向路线：</p>
+<div class="math-display">\[\mathrm{KF} \rightarrow \mathrm{EKF} \rightarrow \mathrm{ESKF}
+\rightarrow \mathrm{IEKF} \rightarrow \mathrm{FAST\text{-}LIO2/IESKF}\]</div>
+<p>UKF、CKF 和 PF 不在这条主线上，却刚好补全了另外两种思路：</p>
+<ul>
+<li><strong>UKF &#x2F; CKF</strong>：尝试绕开显式雅可比，通过代表点传播近似非线性分布。</li>
+<li><strong>PF</strong>：不再坚持单峰高斯假设，通过粒子表达复杂后验分布。</li>
+</ul>
+<p>现在再看这些缩写，我会问两个问题。</p>
+<h3 id="问题一：如何处理非线性？"><a href="#问题一：如何处理非线性？" class="headerlink" title="问题一：如何处理非线性？"></a>问题一：如何处理非线性？</h3><ul>
+<li>EKF 使用一次局部线性化。</li>
+<li>IEKF 在同一帧观测中反复线性化。</li>
+<li>UKF 和 CKF 传播一组确定性的代表点。</li>
+<li>PF 通过大量随机样本传播状态分布。</li>
+</ul>
+<h3 id="问题二：如何表示不确定性？"><a href="#问题二：如何表示不确定性？" class="headerlink" title="问题二：如何表示不确定性？"></a>问题二：如何表示不确定性？</h3><ul>
+<li>KF、EKF、UKF 和 CKF 通常仍以均值和协方差描述近似高斯分布。</li>
+<li>PF 直接用带权粒子集合近似后验分布，因此可以表达多峰与非高斯形状。</li>
+</ul>
+<p>方法名容易混，这两个问题倒不容易混：它是怎么过非线性函数的，又拿什么保存不确定性。</p>
+<h2 id="14-小结"><a href="#14-小结" class="headerlink" title="14. 小结"></a>14. 小结</h2><p>写到这里，几种方法在我脑子里的区别已经比较清楚了：</p>
+<ul>
+<li>EKF 画局部切线，UKF 传播 Sigma Points，CKF 传播按容积规则选出的点。</li>
+<li>它们通常仍用均值和协方差保存状态分布；PF 则保留一批带权粒子。</li>
+<li>粒子滤波能容纳多个位置假设，但状态一高维，粒子数和观测计算都会变得很重。</li>
+<li>FAST-LIO2 有连续初值，又要高频处理大量点云残差，IESKF 比粒子滤波更合适。</li>
+</ul>
+<p>归根到底，大家都在用不完美的预测和观测猜当前状态，只是对非线性和不确定性的处理方式不同。</p>
+<p>下一篇准备把这个系列收尾，从最开始的 KF 一直串回 FAST-LIO2。</p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://luomengwei.github.io/2026/07/28/ukf-ckf-particle-filter-overview/" data-id="cuid8dHjNemba0xe1cZoH2N3D" data-title="除了 EKF，还有哪些滤波方法？UKF、CKF、粒子滤波简单聊聊" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/CKF/" rel="tag">CKF</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/SLAM/" rel="tag">SLAM</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/UKF/" rel="tag">UKF</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">卡尔曼滤波</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/" rel="tag">状态估计</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E7%B2%92%E5%AD%90%E6%BB%A4%E6%B3%A2/" rel="tag">粒子滤波</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2026/07/29/why-robots-need-nonlinear-optimization/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">前一篇</strong>
+      <div class="article-nav-title">
+        
+          机器人为什么离不开非线性优化？
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2026/07/29/kf-to-fast-lio2-state-estimation-series-summary/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">后一篇</strong>
+      <div class="article-nav-title">从 KF 到 FAST-LIO2：机器人状态估计系列总结</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分类</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM/">SLAM</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/">状态估计</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/">非线性优化</a></li></ul></li><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/">SLAM学习笔记</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%95%B0%E5%AD%A6%E5%9F%BA%E7%A1%80/">数学基础</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%95%B0%E5%AD%A6%E5%9F%BA%E7%A1%80/%E4%BC%98%E5%8C%96%E6%96%B9%E6%B3%95/">优化方法</a></li></ul></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/CKF/" rel="tag">CKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/EKF/" rel="tag">EKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESKF/" rel="tag">ESKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/FAST-LIO2/" rel="tag">FAST-LIO2</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Hessian/" rel="tag">Hessian</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IEKF/" rel="tag">IEKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IESKF/" rel="tag">IESKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Jacobian/" rel="tag">Jacobian</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/KF/" rel="tag">KF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LiDAR-IMU/" rel="tag">LiDAR-IMU</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SLAM/" rel="tag">SLAM</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/UKF/" rel="tag">UKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%BB%A3%E4%BB%B7%E5%87%BD%E6%95%B0/" rel="tag">代价函数</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%BC%98%E5%8C%96/" rel="tag">优化</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" rel="tag">传感器融合</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%8D%8F%E6%96%B9%E5%B7%AE/" rel="tag">协方差</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%A4%9A%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" rel="tag">多传感器融合</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">扩展卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%80%E5%A4%A7%E4%BC%BC%E7%84%B6%E4%BC%B0%E8%AE%A1/" rel="tag">最大似然估计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%80%E5%A4%A7%E5%90%8E%E9%AA%8C%E4%BC%B0%E8%AE%A1/" rel="tag">最大后验估计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%80%E5%B0%8F%E4%BA%8C%E4%B9%98/" rel="tag">最小二乘</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA/" rel="tag">机器人</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA%E5%AE%9A%E4%BD%8D/" rel="tag">机器人定位</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%A2%AF%E5%BA%A6/" rel="tag">梯度</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%A2%AF%E5%BA%A6%E4%B8%8B%E9%99%8D/" rel="tag">梯度下降</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%AE%8B%E5%B7%AE/" rel="tag">残差</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%B3%B0%E5%8B%92%E5%B1%95%E5%BC%80/" rel="tag">泰勒展开</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%BF%80%E5%85%89%E6%83%AF%E6%80%A7%E9%87%8C%E7%A8%8B%E8%AE%A1/" rel="tag">激光惯性里程计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%89%9B%E9%A1%BF%E6%B3%95/" rel="tag">牛顿法</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/" rel="tag">状态估计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%B2%92%E5%AD%90%E6%BB%A4%E6%B3%A2/" rel="tag">粒子滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%BA%BF%E6%80%A7%E5%8C%96/" rel="tag">线性化</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E8%AF%AF%E5%B7%AE%E7%8A%B6%E6%80%81%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">误差状态卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E8%BF%AD%E4%BB%A3%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">迭代扩展卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%9B%85%E5%8F%AF%E6%AF%94/" rel="tag">雅可比</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/" rel="tag">非线性优化</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%AB%98%E6%96%AF%E5%88%86%E5%B8%83/" rel="tag">高斯分布</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签云</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/CKF/" style="font-size: 10px;">CKF</a> <a href="/tags/EKF/" style="font-size: 10px;">EKF</a> <a href="/tags/ESKF/" style="font-size: 11.67px;">ESKF</a> <a href="/tags/FAST-LIO2/" style="font-size: 15px;">FAST-LIO2</a> <a href="/tags/Hessian/" style="font-size: 11.67px;">Hessian</a> <a href="/tags/IEKF/" style="font-size: 11.67px;">IEKF</a> <a href="/tags/IESKF/" style="font-size: 13.33px;">IESKF</a> <a href="/tags/Jacobian/" style="font-size: 10px;">Jacobian</a> <a href="/tags/KF/" style="font-size: 10px;">KF</a> <a href="/tags/LiDAR-IMU/" style="font-size: 11.67px;">LiDAR-IMU</a> <a href="/tags/SLAM/" style="font-size: 20px;">SLAM</a> <a href="/tags/UKF/" style="font-size: 10px;">UKF</a> <a href="/tags/%E4%BB%A3%E4%BB%B7%E5%87%BD%E6%95%B0/" style="font-size: 10px;">代价函数</a> <a href="/tags/%E4%BC%98%E5%8C%96/" style="font-size: 11.67px;">优化</a> <a href="/tags/%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" style="font-size: 10px;">传感器融合</a> <a href="/tags/%E5%8D%8F%E6%96%B9%E5%B7%AE/" style="font-size: 10px;">协方差</a> <a href="/tags/%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 16.67px;">卡尔曼滤波</a> <a href="/tags/%E5%A4%9A%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" style="font-size: 10px;">多传感器融合</a> <a href="/tags/%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">扩展卡尔曼滤波</a> <a href="/tags/%E6%9C%80%E5%A4%A7%E4%BC%BC%E7%84%B6%E4%BC%B0%E8%AE%A1/" style="font-size: 10px;">最大似然估计</a> <a href="/tags/%E6%9C%80%E5%A4%A7%E5%90%8E%E9%AA%8C%E4%BC%B0%E8%AE%A1/" style="font-size: 10px;">最大后验估计</a> <a href="/tags/%E6%9C%80%E5%B0%8F%E4%BA%8C%E4%B9%98/" style="font-size: 13.33px;">最小二乘</a> <a href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA/" style="font-size: 10px;">机器人</a> <a href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA%E5%AE%9A%E4%BD%8D/" style="font-size: 13.33px;">机器人定位</a> <a href="/tags/%E6%A2%AF%E5%BA%A6/" style="font-size: 11.67px;">梯度</a> <a href="/tags/%E6%A2%AF%E5%BA%A6%E4%B8%8B%E9%99%8D/" style="font-size: 10px;">梯度下降</a> <a href="/tags/%E6%AE%8B%E5%B7%AE/" style="font-size: 10px;">残差</a> <a href="/tags/%E6%B3%B0%E5%8B%92%E5%B1%95%E5%BC%80/" style="font-size: 13.33px;">泰勒展开</a> <a href="/tags/%E6%BF%80%E5%85%89%E6%83%AF%E6%80%A7%E9%87%8C%E7%A8%8B%E8%AE%A1/" style="font-size: 10px;">激光惯性里程计</a> <a href="/tags/%E7%89%9B%E9%A1%BF%E6%B3%95/" style="font-size: 11.67px;">牛顿法</a> <a href="/tags/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/" style="font-size: 18.33px;">状态估计</a> <a href="/tags/%E7%B2%92%E5%AD%90%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">粒子滤波</a> <a href="/tags/%E7%BA%BF%E6%80%A7%E5%8C%96/" style="font-size: 10px;">线性化</a> <a href="/tags/%E8%AF%AF%E5%B7%AE%E7%8A%B6%E6%80%81%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">误差状态卡尔曼滤波</a> <a href="/tags/%E8%BF%AD%E4%BB%A3%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">迭代扩展卡尔曼滤波</a> <a href="/tags/%E9%9B%85%E5%8F%AF%E6%AF%94/" style="font-size: 10px;">雅可比</a> <a href="/tags/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/" style="font-size: 15px;">非线性优化</a> <a href="/tags/%E9%AB%98%E6%96%AF%E5%88%86%E5%B8%83/" style="font-size: 10px;">高斯分布</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">归档</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/08/">八月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/07/">七月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/06/">六月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/05/">五月 2026</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/08/05/taylor-linearization-jacobian-slam-iteration/">泰勒展开、线性化与雅可比：非线性问题为什么要反复求解？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/08/03/least-squares-mle-map-robot-state-estimation/">最小二乘、最大似然与最大后验：为什么残差平方能够估计机器人状态？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/08/01/slam-state-observation-prediction-residual-cost-function/">状态、观测、预测、残差与代价函数：SLAM 优化问题是怎么构造出来的？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/07/29/why-robots-need-nonlinear-optimization/">机器人为什么离不开非线性优化？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/07/28/ukf-ckf-particle-filter-overview/">除了 EKF，还有哪些滤波方法？UKF、CKF、粒子滤波简单聊聊</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 Tomato<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+<script>window.MathJax = {  tex: {    inlineMath: [['\\(', '\\)']],    displayMath: [['\\[', '\\]']],    processEscapes: true  },  options: {    skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']  },  chtml: {    scale: 1.08  }};</script><script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script></body>
+</html>

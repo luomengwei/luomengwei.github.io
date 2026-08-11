@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>机器人为什么需要状态估计？因为传感器并没有那么靠谱 | Tomato&#39;s Blog</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="用 IMU、轮速计、LiDAR 和相机的局限解释状态估计的直觉：预测、修正和不确定性。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="机器人为什么需要状态估计？因为传感器并没有那么靠谱">
+<meta property="og:url" content="https://luomengwei.github.io/2026/06/02/why-robots-need-state-estimation/index.html">
+<meta property="og:site_name" content="Tomato&#39;s Blog">
+<meta property="og:description" content="用 IMU、轮速计、LiDAR 和相机的局限解释状态估计的直觉：预测、修正和不确定性。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://luomengwei.github.io/images/state-estimation/state-estimator-io-overview.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/state-estimation/robot-sensors-pros-cons.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/state-estimation/prediction-correction-loop.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/state-estimation/slam-localization-mapping-relation.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/state-estimation/imu-lidar-workflow.png">
+<meta property="article:published_time" content="2026-06-01T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-06-02T02:22:02.581Z">
+<meta property="article:author" content="Tomato">
+<meta property="article:tag" content="SLAM">
+<meta property="article:tag" content="卡尔曼滤波">
+<meta property="article:tag" content="多传感器融合">
+<meta property="article:tag" content="机器人定位">
+<meta property="article:tag" content="状态估计">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://luomengwei.github.io/images/state-estimation/state-estimator-io-overview.png">
+  
+    <link rel="alternate" href="/atom.xml" title="Tomato's Blog" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
+
+<!-- hexo injector head_end start --><link rel="stylesheet" href="/css/custom.css"><!-- hexo injector head_end end --><meta name="generator" content="Hexo 8.1.2"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Tomato&#39;s Blog</a>
+      </h1>
+      
+        <h2 id="subtitle-wrap">
+          <a href="/" id="subtitle">Robotics, SLAM and LiDAR-IMU Notes</a>
+        </h2>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS 订阅"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="搜索"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜索"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://luomengwei.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-why-robots-need-state-estimation" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/06/02/why-robots-need-state-estimation/" class="article-date">
+  <time class="dt-published" datetime="2026-06-01T16:00:00.000Z" itemprop="datePublished">2026-06-02</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/SLAM/">SLAM</a>►<a class="article-category-link" href="/categories/SLAM/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/">状态估计</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      机器人为什么需要状态估计？因为传感器并没有那么靠谱
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>这篇笔记用 IMU、轮速计、LiDAR 和相机的例子，整理机器人为什么需要状态估计，以及“预测 + 修正”的核心直觉。</p>
+<span id="more"></span>
+
+<p>在机器人 SLAM 里，有一个问题几乎会贯穿始终：</p>
+<blockquote>
+<p>机器人现在到底在哪？</p>
+</blockquote>
+<p>这个问题看起来很简单，甚至有点像废话。<br>毕竟人走进一个房间，大概看一眼就知道自己在哪；但机器人不一样，它没有真正意义上的“方向感”，也不会像人一样凭经验判断“我刚才好像从门口进来的，所以我应该在门附近”。</p>
+<p>机器人想知道自己在哪，必须依靠传感器。</p>
+<p>问题是，传感器并没有我们想象中那么靠谱。</p>
+<p>IMU 更新很快，但时间一长会漂；轮速计看起来很稳定，但一打滑就开始不老实；LiDAR 能看到环境结构，但遇到长走廊、玻璃、重复墙面时也会迷糊；相机信息很丰富，但光照不好、纹理太少的时候也会“看不清”。</p>
+<p>所以，机器人定位不是简单地读取某一个传感器的数据，而是要在一堆有噪声、有误差、甚至互相矛盾的信息中，估计出一个当前最可能的状态。</p>
+<p>这个过程，就是<strong>状态估计</strong>。</p>
+<hr>
+<h2 id="1-机器人最关心的问题：我在哪？"><a href="#1-机器人最关心的问题：我在哪？" class="headerlink" title="1. 机器人最关心的问题：我在哪？"></a>1. 机器人最关心的问题：我在哪？</h2><p>对于一个移动机器人来说，很多高级功能都建立在一个基础问题之上：</p>
+<blockquote>
+<p>我现在在哪？我朝向哪里？我正在怎么运动？</p>
+</blockquote>
+<p>比如：</p>
+<ul>
+<li>机器人要导航，就必须知道自己当前的位置；</li>
+<li>机器人要避障，就必须知道障碍物相对自己的位置；</li>
+<li>机器人要建图，就必须知道每一帧点云或图像是在什么位姿下采集的；</li>
+<li>机器人要控制运动，就必须知道自己的速度、姿态和运动趋势。</li>
+</ul>
+<p>如果机器人不知道自己在哪，那后面的规划、控制、建图基本都会变得不可靠。</p>
+<p>这就像你在一个商场里导航，手机地图告诉你“请向东走 20 米”，但你完全不知道自己现在在哪，也不知道东在哪。<br>这时候导航再高级也没用，因为最基本的定位信息已经丢了。</p>
+<p>机器人也是一样。</p>
+<p>SLAM 中的很多问题，表面上看是在建图，实际上背后一直在做一件事：</p>
+<blockquote>
+<p>持续估计机器人自身的状态。</p>
+</blockquote>
+<hr>
+<h2 id="2-什么是“状态”？"><a href="#2-什么是“状态”？" class="headerlink" title="2. 什么是“状态”？"></a>2. 什么是“状态”？</h2><p>状态这个词听起来有点抽象，但在机器人里其实可以理解为：</p>
+<blockquote>
+<p>用来描述机器人当前情况的一组变量。</p>
+</blockquote>
+<p>最常见的状态包括：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">位置：机器人在哪里</span><br><span class="line">姿态：机器人朝向哪里</span><br><span class="line">速度：机器人正在怎么运动</span><br><span class="line">角速度：机器人正在怎么旋转</span><br><span class="line">加速度：机器人运动变化有多快</span><br><span class="line">传感器偏置：IMU 等传感器本身有没有慢慢漂</span><br></pre></td></tr></table></figure>
+
+<p>如果是移动机器人，我们经常关心的是二维位姿：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">x：机器人在地图中的横向位置</span><br><span class="line">y：机器人在地图中的纵向位置</span><br><span class="line">yaw：机器人朝向角</span><br></pre></td></tr></table></figure>
+
+<p>如果是三维 SLAM 或者 LiDAR-IMU 里程计，就要关心三维状态：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">p：三维位置</span><br><span class="line">R：三维姿态</span><br><span class="line">v：速度</span><br><span class="line">bg：陀螺仪零偏</span><br><span class="line">ba：加速度计零偏</span><br><span class="line">g：重力方向</span><br></pre></td></tr></table></figure>
+
+<p>这里先不用被这些符号吓到。<br>你可以先把状态理解成一句话：</p>
+<blockquote>
+<p>机器人对“自己现在是什么情况”的数学描述。</p>
+</blockquote>
+<p>比如机器人可以说：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">我现在大概在 x = 2.3 m, y = 5.1 m 的位置，</span><br><span class="line">朝向大概是 30°，</span><br><span class="line">速度大概是 0.5 m/s。</span><br></pre></td></tr></table></figure>
+
+<p>这就是一种状态。</p>
+<p>当然，机器人不会真的这样说话。<br>它只是把这些量存在程序里的状态向量中。</p>
+<p>说到这里，可以先对“状态估计”有一个整体印象。</p>
+<p>它并不是一个只负责“报位置”的小模块，而更像是一个信息融合中枢：一边接收 IMU、轮速计、LiDAR、相机等传感器信息，一边输出机器人当前比较可靠的状态结果。</p>
+<p>如图 1 所示，状态估计器的输入和输出可以概括成下面这样。</p>
+<style>
+.state-note-figure {
+  margin: 1.6em auto;
+  text-align: center;
+}
+
+.state-note-figure img {
+  display: block;
+  width: 84%;
+  max-width: 820px;
+  height: auto;
+  margin: 0 auto;
+  border-radius: 4px;
+}
+
+.state-note-figure figcaption {
+  margin-top: 0.65em;
+  color: #666;
+  font-size: 0.92em;
+  line-height: 1.6;
+}
+
+@media (max-width: 720px) {
+  .state-note-figure img {
+    width: 100%;
+  }
+}
+</style>
+
+<figure class="state-note-figure">
+  <img src="/images/state-estimation/state-estimator-io-overview.png" alt="">
+</figure>
+
+<p>从图 1 可以看出，状态估计器既要融合多种输入，也要输出位置、姿态、速度、偏置以及不确定性等关键信息。</p>
+<p>不过问题在于：这些输入传感器本身并不是完全可靠的。于是，接下来就要回答一个很现实的问题：为什么不能直接相信传感器？</p>
+<hr>
+<h2 id="3-为什么不能直接相信传感器？"><a href="#3-为什么不能直接相信传感器？" class="headerlink" title="3. 为什么不能直接相信传感器？"></a>3. 为什么不能直接相信传感器？</h2><p>既然机器人有传感器，那能不能直接用传感器数据来定位？</p>
+<p>答案是：一般不行。</p>
+<p>因为每种传感器都有自己的脾气。<br>有的勤快但容易漂，有的看得准但反应慢，有的在某些环境下表现很好，换个环境就开始不稳定。</p>
+<p>下面我们分别看几个常见传感器。</p>
+<hr>
+<h2 id="4-IMU：更新很快，但容易漂"><a href="#4-IMU：更新很快，但容易漂" class="headerlink" title="4. IMU：更新很快，但容易漂"></a>4. IMU：更新很快，但容易漂</h2><p>IMU 一般包括陀螺仪和加速度计。</p>
+<p>它可以测量：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">角速度：机器人转得有多快</span><br><span class="line">加速度：机器人加速情况</span><br></pre></td></tr></table></figure>
+
+<p>IMU 最大的优点是：</p>
+<blockquote>
+<p>更新频率高，反应快。</p>
+</blockquote>
+<p>很多 IMU 可以达到几十 Hz、几百 Hz，甚至更高。<br>这意味着机器人运动过程中，IMU 能非常及时地感受到运动变化。</p>
+<p>比如机器人刚刚开始转弯，LiDAR 可能还没来得及处理完一帧点云，但 IMU 已经检测到了角速度变化。</p>
+<p>所以 IMU 很适合做短时间预测。</p>
+<p>但是 IMU 有一个很大的问题：</p>
+<blockquote>
+<p>它会漂。</p>
+</blockquote>
+<p>IMU 的数据需要积分才能得到速度、位置和姿态。<br>角速度积分得到角度，加速度积分得到速度，再积分得到位置。</p>
+<p>问题是，只要 IMU 测量里有一点点误差，积分之后误差就会慢慢变大。</p>
+<p>这就像你闭着眼走路：</p>
+<ul>
+<li>第一步可能还比较准；</li>
+<li>走十步开始有点偏；</li>
+<li>走一百步以后，可能已经不知道偏到哪里去了。</li>
+</ul>
+<p>IMU 也是这样。<br>短时间内它很可靠，长时间单独使用就容易漂移。</p>
+<p>所以我们可以给 IMU 一个比较形象的评价：</p>
+<blockquote>
+<p>IMU 很勤快，但不能让它一个人长期值班。</p>
+</blockquote>
+<hr>
+<h2 id="5-轮速计：看起来稳定，但怕打滑"><a href="#5-轮速计：看起来稳定，但怕打滑" class="headerlink" title="5. 轮速计：看起来稳定，但怕打滑"></a>5. 轮速计：看起来稳定，但怕打滑</h2><p>很多移动机器人会使用轮速计，也就是通过轮子的转动来估计机器人走了多远。</p>
+<p>比如轮子转了一圈，轮子半径已知，就可以估算机器人前进了多少距离。</p>
+<p>轮速计的优点是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">简单</span><br><span class="line">便宜</span><br><span class="line">计算方便</span><br><span class="line">短时间效果不错</span><br></pre></td></tr></table></figure>
+
+<p>但它也有明显的问题：</p>
+<blockquote>
+<p>它默认轮子转了多少，机器人就真的走了多少。</p>
+</blockquote>
+<p>这个假设在理想情况下没问题。<br>但实际工程里，轮子可能会打滑。</p>
+<p>比如：</p>
+<ul>
+<li>地面太滑；</li>
+<li>机器人急加速；</li>
+<li>机器人转弯过快；</li>
+<li>履带式底盘在复杂地面上发生滑移；</li>
+<li>轮子被卡住但编码器还在变化。</li>
+</ul>
+<p>这时候轮速计可能会觉得：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">我已经前进了 1 米。</span><br></pre></td></tr></table></figure>
+
+<p>但机器人实际可能只前进了 0.7 米。</p>
+<p>它不是故意骗人，只是它不知道自己打滑了。</p>
+<p>所以轮速计也不能单独长期信任。</p>
+<p>它更像一个“平时挺老实，但遇到打滑就会误报”的传感器。</p>
+<hr>
+<h2 id="6-LiDAR：能看结构，但也会迷路"><a href="#6-LiDAR：能看结构，但也会迷路" class="headerlink" title="6. LiDAR：能看结构，但也会迷路"></a>6. LiDAR：能看结构，但也会迷路</h2><p>LiDAR，也就是激光雷达，是 SLAM 中非常常见的传感器。</p>
+<p>它可以主动发射激光，测量周围物体的距离，得到点云或者激光扫描数据。</p>
+<p>LiDAR 的优点很明显：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">距离测量精度高</span><br><span class="line">不太依赖光照</span><br><span class="line">能直接感知环境几何结构</span><br><span class="line">适合建图和定位</span><br></pre></td></tr></table></figure>
+
+<p>在很多室内环境里，LiDAR 能看到墙、柱子、门、障碍物等结构。<br>机器人可以利用这些结构来判断自己在哪里。</p>
+<p>比如：</p>
+<blockquote>
+<p>我看到左边有一面墙，前方有一个拐角，这和地图中的某个位置很像，所以我大概在这里。</p>
+</blockquote>
+<p>但是 LiDAR 也不是万能的。</p>
+<p>它比较怕以下情况：</p>
+<h3 id="6-1-长走廊"><a href="#6-1-长走廊" class="headerlink" title="6.1 长走廊"></a>6.1 长走廊</h3><p>长走廊里，两边墙面很平整，结构重复。<br>机器人向前走的时候，LiDAR 看到的几何特征变化不明显。</p>
+<p>这时候它可能很难判断：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">我到底是在走廊前面一点，还是后面一点？</span><br></pre></td></tr></table></figure>
+
+<p>这种情况通常叫做几何退化。</p>
+<hr>
+<h3 id="6-2-重复结构"><a href="#6-2-重复结构" class="headerlink" title="6.2 重复结构"></a>6.2 重复结构</h3><p>比如地下车库、厂房、办公楼走廊，经常有很多相似的柱子、墙面和门洞。</p>
+<p>机器人看到一个柱子，以为自己在 A 区。<br>结果地图里 B 区也有一个差不多的柱子。</p>
+<p>这时候就容易出现匹配混淆。</p>
+<p>环境仿佛在说：</p>
+<blockquote>
+<p>你以为你认识我？其实我每一段都长得差不多。</p>
+</blockquote>
+<hr>
+<h3 id="6-3-玻璃、反光和稀疏结构"><a href="#6-3-玻璃、反光和稀疏结构" class="headerlink" title="6.3 玻璃、反光和稀疏结构"></a>6.3 玻璃、反光和稀疏结构</h3><p>玻璃、镜面、强反光物体会影响激光测距。<br>有些空旷区域结构很少，LiDAR 能提供的约束也会变弱。</p>
+<p>这时候 LiDAR 虽然还在工作，但它对位姿的修正能力会下降。</p>
+<p>所以 LiDAR 可以看环境，但也会遇到“看了，但没完全看明白”的情况。</p>
+<hr>
+<h2 id="7-相机：信息丰富，但也有自己的脾气"><a href="#7-相机：信息丰富，但也有自己的脾气" class="headerlink" title="7. 相机：信息丰富，但也有自己的脾气"></a>7. 相机：信息丰富，但也有自己的脾气</h2><p>相机能提供丰富的视觉信息，比如颜色、纹理、边缘、角点等。</p>
+<p>在视觉 SLAM 中，相机可以通过连续图像之间的特征匹配，估计机器人或相机的运动。</p>
+<p>相机的优点是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">信息量大</span><br><span class="line">成本低</span><br><span class="line">能提供纹理和语义信息</span><br><span class="line">适合识别物体和场景</span><br></pre></td></tr></table></figure>
+
+<p>但相机的问题也不少。</p>
+<h3 id="7-1-怕光照变化"><a href="#7-1-怕光照变化" class="headerlink" title="7.1 怕光照变化"></a>7.1 怕光照变化</h3><p>光线太强、太暗、逆光、频闪灯，都会影响图像质量。</p>
+<p>人眼看着还能凑合，算法可能已经开始头疼。</p>
+<hr>
+<h3 id="7-2-怕纹理不足"><a href="#7-2-怕纹理不足" class="headerlink" title="7.2 怕纹理不足"></a>7.2 怕纹理不足</h3><p>如果墙面是一大片白墙，图像里没有明显特征点，那么相机就很难通过图像匹配估计运动。</p>
+<p>这就像你盯着一张纯白纸，很难判断自己有没有移动。</p>
+<hr>
+<h3 id="7-3-怕运动模糊"><a href="#7-3-怕运动模糊" class="headerlink" title="7.3 怕运动模糊"></a>7.3 怕运动模糊</h3><p>机器人运动太快，或者相机曝光时间较长时，图像会模糊。<br>特征点提取和匹配都会受到影响。</p>
+<p>所以相机虽然信息丰富，但在复杂光照、弱纹理、快速运动场景下也会变得不稳定。</p>
+<hr>
+<h2 id="8-单个传感器不够，那就多传感器融合"><a href="#8-单个传感器不够，那就多传感器融合" class="headerlink" title="8. 单个传感器不够，那就多传感器融合"></a>8. 单个传感器不够，那就多传感器融合</h2><p>看到这里，基本可以得出一个结论：</p>
+<blockquote>
+<p>每个传感器都有优点，但也都有缺点。</p>
+</blockquote>
+<p>为了更直观一点，可以把它们的特点放在一起看，如图 2 所示。</p>
+<figure class="state-note-figure">
+  <img src="/images/state-estimation/robot-sensors-pros-cons.png" alt="">
+</figure>
+
+<p>图 2 其实已经把一个关键结论摆在台面上了：单个传感器各有短板，所以工程里更常见的做法，是让多个传感器互相补位。</p>
+<p>这也就自然引出了多传感器融合。</p>
+<p>比如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">IMU 负责高频预测</span><br><span class="line">LiDAR 负责利用几何结构修正</span><br><span class="line">相机负责提供纹理和语义信息</span><br><span class="line">轮速计提供底盘运动约束</span><br></pre></td></tr></table></figure>
+
+<p>这就像几个人一起判断路线：</p>
+<ul>
+<li>IMU 说：“我感觉我们刚刚转了一个角。”</li>
+<li>轮速计说：“我觉得我们前进了 0.8 米。”</li>
+<li>LiDAR 说：“我看到左边有一面墙，前面有个拐角。”</li>
+<li>相机说：“我看到了门牌和纹理特征。”</li>
+</ul>
+<p>状态估计器要做的事情，就是听完这些意见，然后综合判断：</p>
+<blockquote>
+<p>当前机器人最可能在哪里？</p>
+</blockquote>
+<p>当然，不是所有意见都一样可信。<br>状态估计器还要判断每个传感器在当前情况下的可信程度。</p>
+<p>比如在短时间内，IMU 很有用；<br>但时间长了，不能完全相信它。<br>在结构丰富的环境里，LiDAR 很可靠；<br>但在长走廊或重复墙面里，它的约束可能变弱。<br>在光照好的场景，相机很好用；<br>但在黑暗环境里，它可能就不太适合当主力。</p>
+<p>这就是状态估计的核心难点之一：</p>
+<blockquote>
+<p>不只是融合数据，还要知道什么时候该更相信谁。</p>
+</blockquote>
+<hr>
+<h2 id="9-状态估计到底在做什么？"><a href="#9-状态估计到底在做什么？" class="headerlink" title="9. 状态估计到底在做什么？"></a>9. 状态估计到底在做什么？</h2><p>我们现在可以给状态估计一个比较直观的定义：</p>
+<blockquote>
+<p>状态估计就是根据运动模型和传感器观测，持续估计机器人当前最可能的状态。</p>
+</blockquote>
+<p>这里有两个关键词：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">运动模型</span><br><span class="line">传感器观测</span><br></pre></td></tr></table></figure>
+
+<p>运动模型回答的是：</p>
+<blockquote>
+<p>按照机器人上一时刻的状态和当前运动，它现在大概应该在哪里？</p>
+</blockquote>
+<p>传感器观测回答的是：</p>
+<blockquote>
+<p>根据现在看到的环境或测到的数据，它现在更像是在哪里？</p>
+</blockquote>
+<p>也就是说，状态估计通常包含两个基本动作：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">预测</span><br><span class="line">修正</span><br></pre></td></tr></table></figure>
+
+<hr>
+<h2 id="10-预测：根据运动推测现在在哪"><a href="#10-预测：根据运动推测现在在哪" class="headerlink" title="10. 预测：根据运动推测现在在哪"></a>10. 预测：根据运动推测现在在哪</h2><p>预测可以理解成：</p>
+<blockquote>
+<p>我根据上一时刻的位置和当前运动，先猜一下现在的位置。</p>
+</blockquote>
+<p>比如一个小车上一秒在 0 米的位置，速度是 1 m&#x2F;s。<br>如果过了 1 秒，那么我们可以预测：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">当前位置大概是 1 米。</span><br></pre></td></tr></table></figure>
+
+<p>当然，这只是预测。</p>
+<p>实际情况可能是：</p>
+<ul>
+<li>轮子打滑了，只走了 0.8 米；</li>
+<li>地面有坡度，速度变化了；</li>
+<li>控制命令没有完全执行；</li>
+<li>传感器本身有误差。</li>
+</ul>
+<p>所以预测值不一定准确。<br>但它至少提供了一个初始判断。</p>
+<p>在机器人系统里，IMU 和轮速计经常用于预测。<br>尤其是 IMU，因为它频率高，非常适合在两次 LiDAR 或相机观测之间进行状态传播。</p>
+<hr>
+<h2 id="11-修正：根据观测把预测拉回来"><a href="#11-修正：根据观测把预测拉回来" class="headerlink" title="11. 修正：根据观测把预测拉回来"></a>11. 修正：根据观测把预测拉回来</h2><p>修正可以理解成：</p>
+<blockquote>
+<p>传感器看了一眼环境，发现预测有点偏，于是把状态往更合理的位置拉一拉。</p>
+</blockquote>
+<p>比如预测说机器人在 1 米的位置。<br>但 LiDAR 看到前方墙面的距离，发现机器人更像是在 0.9 米的位置。</p>
+<p>这时候状态估计器不会简单粗暴地说：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">预测错了，直接改成 0.9 米。</span><br></pre></td></tr></table></figure>
+
+<p>也不会固执地说：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">我不听，我就相信预测的 1 米。</span><br></pre></td></tr></table></figure>
+
+<p>更合理的做法是根据预测和观测的不确定性进行折中。</p>
+<p>如果预测很可靠，观测噪声比较大，那就少修正一点。<br>如果观测很可靠，预测不太可靠，那就多修正一点。</p>
+<p>所以最后可能得到：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">最终估计：0.93 米</span><br></pre></td></tr></table></figure>
+
+<p>这就是状态估计里非常重要的思想：</p>
+<blockquote>
+<p>预测给出初值，观测负责纠偏。</p>
+</blockquote>
+<hr>
+<h2 id="12-状态估计可以理解成“预测-修正”"><a href="#12-状态估计可以理解成“预测-修正”" class="headerlink" title="12. 状态估计可以理解成“预测 + 修正”"></a>12. 状态估计可以理解成“预测 + 修正”</h2><p>现在我们可以把状态估计的基本流程写成这样：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">上一时刻状态</span><br><span class="line">      ↓</span><br><span class="line">根据运动模型预测当前状态</span><br><span class="line">      ↓</span><br><span class="line">得到一个不一定准确的预测值</span><br><span class="line">      ↓</span><br><span class="line">传感器观测当前环境</span><br><span class="line">      ↓</span><br><span class="line">比较预测和观测之间的差异</span><br><span class="line">      ↓</span><br><span class="line">根据可信程度进行修正</span><br><span class="line">      ↓</span><br><span class="line">得到当前更可靠的状态估计</span><br></pre></td></tr></table></figure>
+
+<p>这个过程会不断重复。</p>
+<p>机器人每运动一点，就预测一次；<br>每收到新的传感器数据，就修正一次。</p>
+<p>所以状态估计不是一次性计算，而是一个持续运行的过程。</p>
+<p>它有点像你走路时的感觉：</p>
+<ul>
+<li>你根据身体感觉预测自己走到了哪里；</li>
+<li>你再通过眼睛观察周围环境；</li>
+<li>如果发现和预期不一致，就调整自己的判断；</li>
+<li>继续往前走，再继续修正。</li>
+</ul>
+<p>机器人也是这样，只不过它用的是 IMU、LiDAR、相机、轮速计和数学模型。</p>
+<p>如果把状态估计再压缩成一句更直白的话，那就是：先根据运动预测一下，再根据观测修正一下。</p>
+<p>这个过程会不断循环，如图 3 所示。</p>
+<figure class="state-note-figure">
+  <img src="/images/state-estimation/prediction-correction-loop.png" alt="">
+</figure>
+
+<p>图 3 展示的，就是状态估计最核心的工作流程。后面无论是卡尔曼滤波、扩展卡尔曼滤波，还是 FAST-LIO2 中的迭代误差状态卡尔曼滤波，本质上都离不开这条主线。</p>
+<p>不过在进入这些方法之前，还得先回答一个问题：为什么这件事在 SLAM 里尤其重要？</p>
+<hr>
+<h2 id="13-为什么这件事在-SLAM-中特别重要？"><a href="#13-为什么这件事在-SLAM-中特别重要？" class="headerlink" title="13. 为什么这件事在 SLAM 中特别重要？"></a>13. 为什么这件事在 SLAM 中特别重要？</h2><p>SLAM 的全称是 Simultaneous Localization and Mapping，也就是：</p>
+<blockquote>
+<p>同时定位与建图。</p>
+</blockquote>
+<p>这句话里面其实包含两个任务：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Localization：估计机器人在哪里</span><br><span class="line">Mapping：构建周围环境地图</span><br></pre></td></tr></table></figure>
+
+<p>这两个任务是互相影响的。</p>
+<p>定位和建图并不是彼此独立的两个过程，它们更像是一个互相影响、互相依赖的闭环，如图 4 所示。</p>
+<figure class="state-note-figure">
+  <img src="/images/state-estimation/slam-localization-mapping-relation.png" alt="">
+</figure>
+
+<p>从图 4 可以看出，位姿不准会影响地图质量，而地图不准又会反过来影响后续定位。因此在 SLAM 中，状态估计并不是配角，而是整个系统的基础。</p>
+<p>如果位姿估计不准，那么建出来的地图就会变形。<br>如果地图不准，那么后续定位也会受到影响。</p>
+<p>比如机器人在走廊里采集点云。<br>如果它以为自己直线前进，但实际姿态慢慢偏了，那么点云叠加出来的墙面可能会弯曲、重影，甚至出现两堵墙。</p>
+<p>这时候问题不一定是 LiDAR 测距错了，而是机器人每一帧点云对应的位姿估计错了。</p>
+<p>所以在 SLAM 中，状态估计是底层基础。<br>它决定了点云怎么拼接，图像怎么对齐，地图怎么更新，机器人怎么定位。</p>
+<p>很多 SLAM 系统看起来是在“建图”，但核心其实是在不断解决：</p>
+<blockquote>
+<p>当前这一帧数据对应的机器人位姿到底是多少？</p>
+</blockquote>
+<p>接下来，我们再看一个更具体的例子：IMU 和 LiDAR 在系统里是怎么配合的。</p>
+<hr>
+<h2 id="14-一个简单例子：IMU-和-LiDAR-如何配合？"><a href="#14-一个简单例子：IMU-和-LiDAR-如何配合？" class="headerlink" title="14. 一个简单例子：IMU 和 LiDAR 如何配合？"></a>14. 一个简单例子：IMU 和 LiDAR 如何配合？</h2><p>为了更直观地理解，我们可以看一个 LiDAR-IMU 系统的简单流程。</p>
+<p>假设机器人正在室内移动。</p>
+<p>IMU 高频输出运动信息：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">机器人刚才加速了</span><br><span class="line">机器人刚才转了一点</span><br><span class="line">机器人姿态发生了变化</span><br></pre></td></tr></table></figure>
+
+<p>状态估计器根据 IMU 预测：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">机器人现在大概移动到了这里</span><br></pre></td></tr></table></figure>
+
+<p>接着 LiDAR 来了一帧点云。</p>
+<p>系统把当前点云和已有地图进行匹配，发现：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">按照 IMU 预测的位置，点云和地图有点对不上。</span><br></pre></td></tr></table></figure>
+
+<p>于是 LiDAR 提供修正信息：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">机器人位置可能偏了几厘米</span><br><span class="line">姿态可能偏了一点点</span><br></pre></td></tr></table></figure>
+
+<p>状态估计器综合 IMU 预测和 LiDAR 观测，得到修正后的位姿。</p>
+<p>然后再把当前点云插入地图。</p>
+<p>以 LiDAR-IMU 系统为例，IMU 负责高频预测，LiDAR 负责根据环境结构进行纠偏。它们的配合流程可以概括成图 5。</p>
+<figure class="state-note-figure">
+  <img src="/images/state-estimation/imu-lidar-workflow.png" alt="">
+</figure>
+
+<p>图 5 展示了一个很典型的 LiDAR-IMU 状态估计流程。这时候你会发现，前面提到的“预测 + 修正”并不是一句空话，而是真的在具体系统里不断发生。</p>
+<p>这其实就是很多 LiDAR-IMU SLAM 系统的基本思想。</p>
+<p>后面我们会讲到的 FAST-LIO2，也是沿着这个思路展开的。<br>只不过它里面的数学形式更复杂，使用的是迭代误差状态卡尔曼滤波。</p>
+<p>现在先不用急着理解这个名字。<br>我们先记住一点：</p>
+<blockquote>
+<p>IMU 负责快速预测，LiDAR 负责根据环境结构纠偏。</p>
+</blockquote>
+<p>说到这里，卡尔曼滤波要登场就非常自然了。因为它最核心要解决的，就是：有预测、有观测、两者都不完美，那么怎样融合出一个更靠谱的结果？</p>
+<hr>
+<h2 id="15-状态估计不是追求“绝对正确”，而是追求“当前最合理”"><a href="#15-状态估计不是追求“绝对正确”，而是追求“当前最合理”" class="headerlink" title="15. 状态估计不是追求“绝对正确”，而是追求“当前最合理”"></a>15. 状态估计不是追求“绝对正确”，而是追求“当前最合理”</h2><p>很多初学者容易以为，状态估计的目标是得到一个完全正确的位置。</p>
+<p>但实际工程里，完全正确通常很难。</p>
+<p>因为：</p>
+<ul>
+<li>传感器有噪声；</li>
+<li>环境会变化；</li>
+<li>机器人会打滑；</li>
+<li>数据有延迟；</li>
+<li>模型不可能百分百准确；</li>
+<li>有些场景本身就缺少约束。</li>
+</ul>
+<p>所以状态估计更现实的目标是：</p>
+<blockquote>
+<p>在当前已有信息下，估计一个最合理、最可信的状态。</p>
+</blockquote>
+<p>这也是为什么状态估计里经常会出现“不确定性”这个概念。</p>
+<p>系统不仅要知道：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">我估计机器人在这里。</span><br></pre></td></tr></table></figure>
+
+<p>还要知道：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">我对这个估计有多自信。</span><br></pre></td></tr></table></figure>
+
+<p>如果系统很自信，就可以更大胆地使用当前估计。<br>如果系统不自信，就应该更谨慎，比如降低速度、等待更多观测、触发重定位等。</p>
+<p>这也是状态估计和简单传感器读取之间的重要区别。</p>
+<p>传感器读取只是告诉你一个数。<br>状态估计不仅要给出一个状态，还要考虑这个状态有多可靠。</p>
+<hr>
+<h2 id="16-为什么后面要学卡尔曼滤波？"><a href="#16-为什么后面要学卡尔曼滤波？" class="headerlink" title="16. 为什么后面要学卡尔曼滤波？"></a>16. 为什么后面要学卡尔曼滤波？</h2><p>讲到这里，卡尔曼滤波就很自然地出现了。</p>
+<p>因为卡尔曼滤波解决的正是这类问题：</p>
+<blockquote>
+<p>有一个系统状态；<br>有一个运动预测；<br>有一个传感器观测；<br>两者都不完美；<br>我们需要根据它们的不确定性，估计一个更可靠的状态。</p>
+</blockquote>
+<p>卡尔曼滤波的核心思想可以先用一句话概括：</p>
+<blockquote>
+<p>先预测，再修正。</p>
+</blockquote>
+<p>或者更口语一点：</p>
+<blockquote>
+<p>先根据运动模型猜一下，再根据传感器观测改一下。</p>
+</blockquote>
+<p>这就是卡尔曼滤波最重要的直觉。</p>
+<p>后面标准卡尔曼滤波、扩展卡尔曼滤波、误差状态卡尔曼滤波、迭代卡尔曼滤波，本质上都是围绕这个思想不断扩展。</p>
+<p>系统简单、模型线性时，可以用标准卡尔曼滤波。<br>系统非线性时，需要扩展卡尔曼滤波。<br>涉及 IMU、姿态、旋转时，经常会用误差状态卡尔曼滤波。<br>观测模型比较复杂、一次线性化不够时，就可能需要迭代更新。</p>
+<p>这些名字听起来很多，但主线其实没有变：</p>
+<blockquote>
+<p>预测 + 修正 + 不确定性权衡。</p>
+</blockquote>
+<hr>
+<h2 id="17-小结"><a href="#17-小结" class="headerlink" title="17. 小结"></a>17. 小结</h2><p>这一篇我们主要讲了状态估计的背景和直觉。</p>
+<p>简单总结一下：</p>
+<ol>
+<li>机器人想要导航、建图、避障和控制，首先要知道自己当前的状态；</li>
+<li>状态可以理解为描述机器人当前情况的一组变量，比如位置、姿态、速度、传感器偏置等；</li>
+<li>单个传感器并不完全可靠，IMU 会漂，轮速计怕打滑，LiDAR 怕退化和重复结构，相机怕光照和弱纹理；</li>
+<li>多传感器融合的目的，是让不同传感器互相补充；</li>
+<li>状态估计的核心过程可以理解成“预测 + 修正”；</li>
+<li>卡尔曼滤波正是解决这类状态估计问题的重要方法。</li>
+</ol>
+<p>下一篇我们就正式进入卡尔曼滤波。</p>
+<p>不过先不用急着背公式。<br>理解卡尔曼滤波的第一步，是先抓住它最核心的思想：</p>
+<blockquote>
+<p>预测不一定准，观测也不一定准，所以我们要根据两者的不确定性，决定这次到底更相信谁。</p>
+</blockquote>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://luomengwei.github.io/2026/06/02/why-robots-need-state-estimation/" data-id="cuid4t00gMUYg5jD0HJ5iDKXw" data-title="机器人为什么需要状态估计？因为传感器并没有那么靠谱" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/SLAM/" rel="tag">SLAM</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">卡尔曼滤波</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E5%A4%9A%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" rel="tag">多传感器融合</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA%E5%AE%9A%E4%BD%8D/" rel="tag">机器人定位</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/" rel="tag">状态估计</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2026/06/02/standard-kalman-filter-1d-car/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">前一篇</strong>
+      <div class="article-nav-title">
+        
+          标准卡尔曼滤波 KF：从一辆只会直线运动的小车开始
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2026/06/01/gradient-descent-newton-method/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">后一篇</strong>
+      <div class="article-nav-title">梯度下降和牛顿法的区别：为什么一个只看方向，一个还看曲率？</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分类</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM/">SLAM</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/">状态估计</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/">非线性优化</a></li></ul></li><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/">SLAM学习笔记</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%95%B0%E5%AD%A6%E5%9F%BA%E7%A1%80/">数学基础</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%95%B0%E5%AD%A6%E5%9F%BA%E7%A1%80/%E4%BC%98%E5%8C%96%E6%96%B9%E6%B3%95/">优化方法</a></li></ul></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/CKF/" rel="tag">CKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/EKF/" rel="tag">EKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESKF/" rel="tag">ESKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/FAST-LIO2/" rel="tag">FAST-LIO2</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Hessian/" rel="tag">Hessian</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IEKF/" rel="tag">IEKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IESKF/" rel="tag">IESKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Jacobian/" rel="tag">Jacobian</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/KF/" rel="tag">KF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LiDAR-IMU/" rel="tag">LiDAR-IMU</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SLAM/" rel="tag">SLAM</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/UKF/" rel="tag">UKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%BB%A3%E4%BB%B7%E5%87%BD%E6%95%B0/" rel="tag">代价函数</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%BC%98%E5%8C%96/" rel="tag">优化</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" rel="tag">传感器融合</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%8D%8F%E6%96%B9%E5%B7%AE/" rel="tag">协方差</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%A4%9A%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" rel="tag">多传感器融合</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">扩展卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%80%E5%A4%A7%E4%BC%BC%E7%84%B6%E4%BC%B0%E8%AE%A1/" rel="tag">最大似然估计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%80%E5%A4%A7%E5%90%8E%E9%AA%8C%E4%BC%B0%E8%AE%A1/" rel="tag">最大后验估计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%80%E5%B0%8F%E4%BA%8C%E4%B9%98/" rel="tag">最小二乘</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA/" rel="tag">机器人</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA%E5%AE%9A%E4%BD%8D/" rel="tag">机器人定位</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%A2%AF%E5%BA%A6/" rel="tag">梯度</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%A2%AF%E5%BA%A6%E4%B8%8B%E9%99%8D/" rel="tag">梯度下降</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%AE%8B%E5%B7%AE/" rel="tag">残差</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%B3%B0%E5%8B%92%E5%B1%95%E5%BC%80/" rel="tag">泰勒展开</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%BF%80%E5%85%89%E6%83%AF%E6%80%A7%E9%87%8C%E7%A8%8B%E8%AE%A1/" rel="tag">激光惯性里程计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%89%9B%E9%A1%BF%E6%B3%95/" rel="tag">牛顿法</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/" rel="tag">状态估计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%B2%92%E5%AD%90%E6%BB%A4%E6%B3%A2/" rel="tag">粒子滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%BA%BF%E6%80%A7%E5%8C%96/" rel="tag">线性化</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E8%AF%AF%E5%B7%AE%E7%8A%B6%E6%80%81%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">误差状态卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E8%BF%AD%E4%BB%A3%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">迭代扩展卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%9B%85%E5%8F%AF%E6%AF%94/" rel="tag">雅可比</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/" rel="tag">非线性优化</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%AB%98%E6%96%AF%E5%88%86%E5%B8%83/" rel="tag">高斯分布</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签云</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/CKF/" style="font-size: 10px;">CKF</a> <a href="/tags/EKF/" style="font-size: 10px;">EKF</a> <a href="/tags/ESKF/" style="font-size: 11.67px;">ESKF</a> <a href="/tags/FAST-LIO2/" style="font-size: 15px;">FAST-LIO2</a> <a href="/tags/Hessian/" style="font-size: 11.67px;">Hessian</a> <a href="/tags/IEKF/" style="font-size: 11.67px;">IEKF</a> <a href="/tags/IESKF/" style="font-size: 13.33px;">IESKF</a> <a href="/tags/Jacobian/" style="font-size: 10px;">Jacobian</a> <a href="/tags/KF/" style="font-size: 10px;">KF</a> <a href="/tags/LiDAR-IMU/" style="font-size: 11.67px;">LiDAR-IMU</a> <a href="/tags/SLAM/" style="font-size: 20px;">SLAM</a> <a href="/tags/UKF/" style="font-size: 10px;">UKF</a> <a href="/tags/%E4%BB%A3%E4%BB%B7%E5%87%BD%E6%95%B0/" style="font-size: 10px;">代价函数</a> <a href="/tags/%E4%BC%98%E5%8C%96/" style="font-size: 11.67px;">优化</a> <a href="/tags/%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" style="font-size: 10px;">传感器融合</a> <a href="/tags/%E5%8D%8F%E6%96%B9%E5%B7%AE/" style="font-size: 10px;">协方差</a> <a href="/tags/%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 16.67px;">卡尔曼滤波</a> <a href="/tags/%E5%A4%9A%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" style="font-size: 10px;">多传感器融合</a> <a href="/tags/%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">扩展卡尔曼滤波</a> <a href="/tags/%E6%9C%80%E5%A4%A7%E4%BC%BC%E7%84%B6%E4%BC%B0%E8%AE%A1/" style="font-size: 10px;">最大似然估计</a> <a href="/tags/%E6%9C%80%E5%A4%A7%E5%90%8E%E9%AA%8C%E4%BC%B0%E8%AE%A1/" style="font-size: 10px;">最大后验估计</a> <a href="/tags/%E6%9C%80%E5%B0%8F%E4%BA%8C%E4%B9%98/" style="font-size: 13.33px;">最小二乘</a> <a href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA/" style="font-size: 10px;">机器人</a> <a href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA%E5%AE%9A%E4%BD%8D/" style="font-size: 13.33px;">机器人定位</a> <a href="/tags/%E6%A2%AF%E5%BA%A6/" style="font-size: 11.67px;">梯度</a> <a href="/tags/%E6%A2%AF%E5%BA%A6%E4%B8%8B%E9%99%8D/" style="font-size: 10px;">梯度下降</a> <a href="/tags/%E6%AE%8B%E5%B7%AE/" style="font-size: 10px;">残差</a> <a href="/tags/%E6%B3%B0%E5%8B%92%E5%B1%95%E5%BC%80/" style="font-size: 13.33px;">泰勒展开</a> <a href="/tags/%E6%BF%80%E5%85%89%E6%83%AF%E6%80%A7%E9%87%8C%E7%A8%8B%E8%AE%A1/" style="font-size: 10px;">激光惯性里程计</a> <a href="/tags/%E7%89%9B%E9%A1%BF%E6%B3%95/" style="font-size: 11.67px;">牛顿法</a> <a href="/tags/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/" style="font-size: 18.33px;">状态估计</a> <a href="/tags/%E7%B2%92%E5%AD%90%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">粒子滤波</a> <a href="/tags/%E7%BA%BF%E6%80%A7%E5%8C%96/" style="font-size: 10px;">线性化</a> <a href="/tags/%E8%AF%AF%E5%B7%AE%E7%8A%B6%E6%80%81%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">误差状态卡尔曼滤波</a> <a href="/tags/%E8%BF%AD%E4%BB%A3%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">迭代扩展卡尔曼滤波</a> <a href="/tags/%E9%9B%85%E5%8F%AF%E6%AF%94/" style="font-size: 10px;">雅可比</a> <a href="/tags/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/" style="font-size: 15px;">非线性优化</a> <a href="/tags/%E9%AB%98%E6%96%AF%E5%88%86%E5%B8%83/" style="font-size: 10px;">高斯分布</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">归档</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/08/">八月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/07/">七月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/06/">六月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/05/">五月 2026</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/08/05/taylor-linearization-jacobian-slam-iteration/">泰勒展开、线性化与雅可比：非线性问题为什么要反复求解？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/08/03/least-squares-mle-map-robot-state-estimation/">最小二乘、最大似然与最大后验：为什么残差平方能够估计机器人状态？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/08/01/slam-state-observation-prediction-residual-cost-function/">状态、观测、预测、残差与代价函数：SLAM 优化问题是怎么构造出来的？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/07/29/why-robots-need-nonlinear-optimization/">机器人为什么离不开非线性优化？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/07/28/ukf-ckf-particle-filter-overview/">除了 EKF，还有哪些滤波方法？UKF、CKF、粒子滤波简单聊聊</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 Tomato<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>

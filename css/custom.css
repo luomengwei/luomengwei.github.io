@@ -1,0 +1,55 @@
+body,
+button,
+input,
+select,
+textarea,
+.article-title,
+.article-entry,
+.article-meta,
+.article-footer,
+.archive-article-title,
+.widget,
+#header,
+#footer {
+  font-family: "Times New Roman", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", SimSun, serif;
+}
+
+.math-display {
+  margin: 0.85em 0 1em;
+  overflow: visible;
+  text-align: center;
+}
+
+.math-inline mjx-container,
+.math-display mjx-container {
+  font-size: 108% !important;
+}
+
+.math-inline mjx-container {
+  vertical-align: -0.08em;
+}
+
+.math-display mjx-container[display="true"] {
+  margin: 0 !important;
+  overflow: visible !important;
+}
+
+.article-entry .highlight.text .code pre,
+.article-entry .highlight.text .code .line {
+  font-family: "Cambria Math", "Times New Roman", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", SimSun, serif;
+  font-size: 16px;
+  line-height: 1.75;
+  letter-spacing: 0;
+}
+
+.article-entry .highlight.text .gutter pre {
+  font-family: "Times New Roman", Georgia, serif;
+  line-height: 1.75;
+}
+
+@media (max-width: 720px) {
+  .math-display {
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+}

@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>机器人为什么离不开非线性优化？ | Tomato&#39;s Blog</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="从多传感器观测、状态、残差和代价函数出发，直观理解非线性优化为什么贯穿机器人与 SLAM，以及它如何把互相矛盾的测量变成整体合理的状态估计。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="机器人为什么离不开非线性优化？">
+<meta property="og:url" content="https://luomengwei.github.io/2026/07/29/why-robots-need-nonlinear-optimization/index.html">
+<meta property="og:site_name" content="Tomato&#39;s Blog">
+<meta property="og:description" content="从多传感器观测、状态、残差和代价函数出发，直观理解非线性优化为什么贯穿机器人与 SLAM，以及它如何把互相矛盾的测量变成整体合理的状态估计。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://luomengwei.github.io/images/nonlinear-optimization/01-sensor-conflict.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/nonlinear-optimization/02-state-residual-loop.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/nonlinear-optimization/03-nonlinear-sources.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/nonlinear-optimization/04-cost-surface-corrected.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/nonlinear-optimization/05-slam-pipeline.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/nonlinear-optimization/06-summary.png">
+<meta property="article:published_time" content="2026-07-29T13:10:00.000Z">
+<meta property="article:modified_time" content="2026-08-10T14:53:19.672Z">
+<meta property="article:author" content="Tomato">
+<meta property="article:tag" content="SLAM">
+<meta property="article:tag" content="最小二乘">
+<meta property="article:tag" content="机器人">
+<meta property="article:tag" content="状态估计">
+<meta property="article:tag" content="非线性优化">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://luomengwei.github.io/images/nonlinear-optimization/01-sensor-conflict.png">
+  
+    <link rel="alternate" href="/atom.xml" title="Tomato's Blog" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
+
+<!-- hexo injector head_end start --><link rel="stylesheet" href="/css/custom.css"><!-- hexo injector head_end end --><meta name="generator" content="Hexo 8.1.2"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Tomato&#39;s Blog</a>
+      </h1>
+      
+        <h2 id="subtitle-wrap">
+          <a href="/" id="subtitle">Robotics, SLAM and LiDAR-IMU Notes</a>
+        </h2>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS 订阅"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="搜索"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜索"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://luomengwei.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-why-robots-need-nonlinear-optimization" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/07/29/why-robots-need-nonlinear-optimization/" class="article-date">
+  <time class="dt-published" datetime="2026-07-29T13:10:00.000Z" itemprop="datePublished">2026-07-29</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/SLAM/">SLAM</a>►<a class="article-category-link" href="/categories/SLAM/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/">非线性优化</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      机器人为什么离不开非线性优化？
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>你让一台机器人沿着地下停车场行驶一圈，然后回到出发点。</p>
+<p>从人的视角看，这件事并不复杂：机器人绕了一圈，最后停回原来的车位。</p>
+<span id="more"></span>
+
+<p>但机器人内部的几个传感器，可能会给出完全不同的答案：</p>
+<ul>
+<li>轮速计认为机器人向前行驶了 286.4 米；</li>
+<li>IMU 积分后认为机器人转过了 361.8°；</li>
+<li>激光雷达匹配得到的终点与起点相差 0.7 米；</li>
+<li>相机认为两张图像非常相似，应该已经回到了原处；</li>
+<li>GPS 在地下停车场根本没有可靠信号。</li>
+</ul>
+<p>问题来了：</p>
+<blockquote>
+<p>这些测量互相矛盾，机器人到底应该相信谁？</p>
+</blockquote>
+<p>它不能简单相信某一个传感器，也不能把几个结果直接取平均。机器人真正需要做的，是寻找一组状态，使所有传感器的观测都能被尽可能合理地解释。</p>
+<p>这就是非线性优化在机器人和 SLAM 中存在的意义。</p>
+<style>
+.nonlinear-optimization-figure {
+  margin: 1.5em auto 1.8em;
+  text-align: center;
+}
+.nonlinear-optimization-figure img {
+  display: block;
+  width: 76%;
+  max-width: 860px;
+  height: auto;
+  margin: 0 auto;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.nonlinear-optimization-figure-wide img {
+  width: 88%;
+  max-width: 1020px;
+}
+.nonlinear-optimization-figure figcaption {
+  display: none;
+}
+@media (max-width: 720px) {
+  .nonlinear-optimization-figure img,
+  .nonlinear-optimization-figure-wide img {
+    width: 100%;
+  }
+}
+</style>
+
+<h2 id="1-传感器给出的不是答案，而是线索"><a href="#1-传感器给出的不是答案，而是线索" class="headerlink" title="1. 传感器给出的不是答案，而是线索"></a>1. 传感器给出的不是答案，而是线索</h2><p>刚开始学习机器人时，很容易产生一个误解：</p>
+<blockquote>
+<p>激光雷达测出了距离，IMU 测出了加速度，相机拍到了图像，那机器人的位置不就已经知道了吗？</p>
+</blockquote>
+<p>实际上，传感器并不会直接告诉机器人：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">你现在位于地图坐标系的 (12.5, 8.7, 1.2)，</span><br><span class="line">朝向为 32.6°。</span><br></pre></td></tr></table></figure>
+
+<p>它们只能提供与状态有关的间接信息。例如：</p>
+<ul>
+<li>激光雷达告诉你：某个方向 5.2 米外存在一个物体；</li>
+<li>相机告诉你：某个角点位于像素坐标 <span class="math-inline">\((u,v)\)</span>；</li>
+<li>IMU 告诉你：当前角速度大约为 <span class="math-inline">\(0.03\,\text{rad/s}\)</span>；</li>
+<li>轮速计告诉你：车轮在这一小段时间内转动了一定角度；</li>
+<li>GPS 告诉你：接收机可能位于某个经纬度附近。</li>
+</ul>
+<p>这些都不是机器人的完整状态，只是与状态有关的测量。机器人需要根据它们反过来推断：自己在哪里、朝向哪里、速度是多少、传感器是否存在偏置，以及周围地图长什么样。</p>
+<p>从信息流上看，机器人一直在重复这样一件事：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">给出当前状态</span><br><span class="line">   ↓</span><br><span class="line">预测传感器应该看到什么</span><br><span class="line">   ↓</span><br><span class="line">与传感器实际看到的内容比较</span><br><span class="line">   ↓</span><br><span class="line">根据误差修正状态</span><br></pre></td></tr></table></figure>
+
+<figure class="nonlinear-optimization-figure nonlinear-optimization-figure-wide">
+  <img src="/images/nonlinear-optimization/01-sensor-conflict.png" alt="" aria-label="图 1 多个传感器对机器人位姿给出带偏差的观测">
+</figure>
+
+<p>传感器提供的是带噪声、带偏差，甚至互相矛盾的线索，而不是唯一正确的状态。</p>
+<h2 id="2-为什么不能挑一个“最可靠”的传感器？"><a href="#2-为什么不能挑一个“最可靠”的传感器？" class="headerlink" title="2. 为什么不能挑一个“最可靠”的传感器？"></a>2. 为什么不能挑一个“最可靠”的传感器？</h2><p>因为每一种传感器都有自己擅长和不擅长的场景，不存在一个在任何时间、任何环境里都绝对可靠的传感器。</p>
+<h3 id="2-1-IMU-更新快，但会漂移"><a href="#2-1-IMU-更新快，但会漂移" class="headerlink" title="2.1 IMU 更新快，但会漂移"></a>2.1 IMU 更新快，但会漂移</h3><p>IMU 能以很高的频率测量角速度和加速度，非常适合描述机器人短时间内的运动。但 IMU 存在零偏和噪声：一点点角速度误差，经过长时间积分后会变成明显的姿态误差；加速度经过两次积分得到位置，误差积累会更加严重。</p>
+<p>所以 IMU 的特点通常是：</p>
+<blockquote>
+<p>短时间内连续、平滑，长时间使用却会逐渐漂移。</p>
+</blockquote>
+<h3 id="2-2-相机信息丰富，但受环境影响明显"><a href="#2-2-相机信息丰富，但受环境影响明显" class="headerlink" title="2.2 相机信息丰富，但受环境影响明显"></a>2.2 相机信息丰富，但受环境影响明显</h3><p>相机能提供纹理、颜色和几何信息，也能通过特征点或像素亮度判断相机运动。但它容易受到光照变化、运动模糊、低纹理、强反光、重复纹理和动态物体的影响。</p>
+<p>相机在纹理丰富、光照稳定的环境中可能表现很好，在黑暗走廊或白墙场景中却可能迅速失效。</p>
+<h3 id="2-3-激光雷达几何精度高，但也会退化"><a href="#2-3-激光雷达几何精度高，但也会退化" class="headerlink" title="2.3 激光雷达几何精度高，但也会退化"></a>2.3 激光雷达几何精度高，但也会退化</h3><p>激光雷达可以直接测量空间距离，通常具有较好的几何精度。但在长走廊、单一平面、隧道或重复立柱区域，点云可能只在部分方向上提供充分约束。</p>
+<p>例如，在一条笔直且结构重复的走廊中，激光雷达很容易判断机器人离左右墙壁有多远，却未必能准确判断它沿走廊方向移动了多少。这就是几何退化的一种表现。</p>
+<h3 id="2-4-GPS-有绝对位置，但并非处处可用"><a href="#2-4-GPS-有绝对位置，但并非处处可用" class="headerlink" title="2.4 GPS 有绝对位置，但并非处处可用"></a>2.4 GPS 有绝对位置，但并非处处可用</h3><p>GPS 能提供全局位置，却会受到建筑遮挡、多路径反射和信号中断的影响。在地下停车场、隧道和室内环境中，GPS 往往无法可靠使用。</p>
+<p>所以真实机器人不会期待某个传感器永远正确，而是希望：</p>
+<blockquote>
+<p>每个传感器在自己擅长的时候提供约束，在不可靠的时候降低影响。</p>
+</blockquote>
+<p>把这些不同来源、不同精度、不同频率的信息统一起来，本身就是一个状态估计与优化问题。</p>
+<h2 id="3-为什么不能直接取平均？"><a href="#3-为什么不能直接取平均？" class="headerlink" title="3. 为什么不能直接取平均？"></a>3. 为什么不能直接取平均？</h2><p>假设三个传感器测得机器人在一条直线上的位置分别为：</p>
+<div class="math-display">\[9.8\,\text{m},\qquad 10.1\,\text{m},\qquad 13.5\,\text{m}\]</div>
+<p>简单平均得到：</p>
+<div class="math-display">\[\frac{9.8+10.1+13.5}{3}=11.13\,\text{m}\]</div>
+<p>这个结果未必合理。第三个测量可能来自受到遮挡的 GPS，其误差远大于另外两个传感器。直接平均相当于默认三个测量同样可靠，显然不符合实际。</p>
+<p>更合理的做法，是根据每个测量的不确定性分配权重：</p>
+<div class="math-display">\[x^\star
+=
+\operatorname*{arg\,min}_{x}
+\sum_i w_i(x-z_i)^2\]</div>
+<p>其中，<span class="math-inline">\(x\)</span> 是待估计的位置，<span class="math-inline">\(z_i\)</span> 是第 <span class="math-inline">\(i\)</span> 个测量，<span class="math-inline">\(w_i\)</span> 是它的权重。若测量噪声方差为 <span class="math-inline">\(\sigma_i^2\)</span>，高斯噪声模型下通常取：</p>
+<div class="math-display">\[w_i=\frac{1}{\sigma_i^2}\]</div>
+<p>方差越小，测量越稳定，权重越大；方差越大，测量对最终结果的影响越小。这里的权重不是凭感觉写出的“信任分”，而应来自噪声模型、标定结果或在线估计。</p>
+<p>真实 SLAM 远比这个一维例子复杂。状态可能同时包含三维位置、三维旋转、速度、IMU 偏置、重力、传感器外参，以及成千上万个地图点；测量与这些状态之间的关系，也通常不是简单的加减法。</p>
+<h2 id="4-什么是机器人状态？"><a href="#4-什么是机器人状态？" class="headerlink" title="4. 什么是机器人状态？"></a>4. 什么是机器人状态？</h2><p>在优化问题中，首先要明确到底要估计什么。所有待估计的未知量，可以统一记为状态变量 <span class="math-inline">\(\mathbf{x}\)</span>。</p>
+<p>最简单的二维机器人状态可能只有：</p>
+<div class="math-display">\[\mathbf{x}
+=
+\begin{bmatrix}
+x &amp; y &amp; \theta
+\end{bmatrix}^{T}\]</div>
+<p>其中 <span class="math-inline">\((x,y)\)</span> 表示平面位置，<span class="math-inline">\(\theta\)</span> 表示朝向。</p>
+<p>三维激光惯性里程计中的状态会复杂得多，例如：</p>
+<div class="math-display">\[\mathbf{x}
+=
+\left[
+\mathbf{R},
+\mathbf{p},
+\mathbf{v},
+\mathbf{b}_g,
+\mathbf{b}_a,
+\mathbf{g}
+\right]\]</div>
+<p>其中：</p>
+<ul>
+<li><span class="math-inline">\(\mathbf{R}\)</span>：姿态；</li>
+<li><span class="math-inline">\(\mathbf{p}\)</span>：位置；</li>
+<li><span class="math-inline">\(\mathbf{v}\)</span>：速度；</li>
+<li><span class="math-inline">\(\mathbf{b}_g\)</span>：陀螺仪偏置；</li>
+<li><span class="math-inline">\(\mathbf{b}_a\)</span>：加速度计偏置；</li>
+<li><span class="math-inline">\(\mathbf{g}\)</span>：重力相关状态。</li>
+</ul>
+<p>视觉 SLAM 中还可能加入大量三维地图点 <span class="math-inline">\(\mathbf{P}_1,\mathbf{P}_2,\ldots,\mathbf{P}_M\)</span>。于是整个问题就变成了：</p>
+<blockquote>
+<p>根据所有传感器观测，寻找一组最合理的机器人状态和地图状态。</p>
+</blockquote>
+<h2 id="5-优化真正做的事情：让预测尽量符合观测"><a href="#5-优化真正做的事情：让预测尽量符合观测" class="headerlink" title="5. 优化真正做的事情：让预测尽量符合观测"></a>5. 优化真正做的事情：让预测尽量符合观测</h2><p>假设当前状态为 <span class="math-inline">\(\mathbf{x}\)</span>。根据传感器模型，机器人可以预测自己应该看到什么：</p>
+<div class="math-display">\[\hat{\mathbf{z}}=h(\mathbf{x})\]</div>
+<p>真实传感器给出的观测是 <span class="math-inline">\(\mathbf{z}\)</span>，二者之间的差异就是残差：</p>
+<div class="math-display">\[\mathbf{r}(\mathbf{x})
+=
+\mathbf{z}-\hat{\mathbf{z}}
+=
+\mathbf{z}-h(\mathbf{x})\]</div>
+<p>有些文献会采用相反的符号 <span class="math-inline">\(h(\mathbf{x})-\mathbf{z}\)</span>。只要雅可比和后续推导保持一致，两种约定都可以。</p>
+<p>以相机为例，地图中有一个三维点 <span class="math-inline">\(\mathbf{P}\)</span>，当前相机位姿为 <span class="math-inline">\(\mathbf{T}\)</span>。它在图像中的预测像素位置为：</p>
+<div class="math-display">\[\hat{\mathbf{z}}=\pi(\mathbf{T}\mathbf{P})\]</div>
+<p>其中 <span class="math-inline">\(\pi(\cdot)\)</span> 是相机投影模型。如果实际检测到的像素位置为 <span class="math-inline">\(\mathbf{z}\)</span>，那么重投影残差就是：</p>
+<div class="math-display">\[\mathbf{r}(\mathbf{x})
+=
+\mathbf{z}-\pi(\mathbf{T}\mathbf{P})\]</div>
+<p>残差很大，说明当前位姿、地图点、数据关联或模型参数至少有一部分不合理。优化器会反复执行：预测观测、计算残差、求状态修正量、更新状态，再重新计算。</p>
+<figure class="nonlinear-optimization-figure nonlinear-optimization-figure-wide">
+  <img src="/images/nonlinear-optimization/02-state-residual-loop.png" alt="" aria-label="图 2 从当前状态到预测、残差和状态修正的迭代闭环">
+</figure>
+
+<p>优化不是直接“猜答案”，而是在预测、观测和残差之间不断校正状态。</p>
+<h2 id="6-从残差到代价函数"><a href="#6-从残差到代价函数" class="headerlink" title="6. 从残差到代价函数"></a>6. 从残差到代价函数</h2><p>实际系统不会只有一个观测。一帧激光雷达可能包含数万个点，一张图像可能包含上千个特征或像素块，IMU 还会连续不断地产生测量。</p>
+<p>假设共有 <span class="math-inline">\(m\)</span> 个观测，每个观测对应一个残差 <span class="math-inline">\(\mathbf{r}_i(\mathbf{x})\)</span>。最基础的非线性最小二乘目标可以写成：</p>
+<div class="math-display">\[F(\mathbf{x})
+=
+\frac{1}{2}
+\sum_{i=1}^{m}
+\left\|
+\mathbf{r}_i(\mathbf{x})
+\right\|^2\]</div>
+<p>但不同残差的单位和噪声并不相同。像素误差、米制距离误差和 IMU 误差不能不加处理地直接相加。更常见的加权形式是：</p>
+<div class="math-display">\[F(\mathbf{x})
+=
+\frac{1}{2}
+\sum_{i=1}^{m}
+\rho\!\left(
+\left\|
+\mathbf{r}_i(\mathbf{x})
+\right\|_{\boldsymbol{\Sigma}_i}^{2}
+\right)\]</div>
+<p>其中：</p>
+<div class="math-display">\[\left\|\mathbf{r}_i\right\|_{\boldsymbol{\Sigma}_i}^{2}
+=
+\mathbf{r}_i^{T}
+\boldsymbol{\Sigma}_i^{-1}
+\mathbf{r}_i\]</div>
+<p><span class="math-inline">\(\boldsymbol{\Sigma}_i\)</span> 描述第 <span class="math-inline">\(i\)</span> 个观测的不确定性，<span class="math-inline">\(\boldsymbol{\Sigma}_i^{-1}\)</span> 也叫信息矩阵；<span class="math-inline">\(\rho(\cdot)\)</span> 是鲁棒核，用来降低异常值对结果的破坏。</p>
+<p>最终要寻找的是：</p>
+<div class="math-display">\[\mathbf{x}^{\star}
+=
+\operatorname*{arg\,min}_{\mathbf{x}}F(\mathbf{x})\]</div>
+<p><span class="math-inline">\(\operatorname*{arg\,min}\)</span> 求的不是最小代价值本身，而是<strong>让代价函数取得较小值的那组状态</strong>。</p>
+<h2 id="7-优化不是让每个残差都等于零"><a href="#7-优化不是让每个残差都等于零" class="headerlink" title="7. 优化不是让每个残差都等于零"></a>7. 优化不是让每个残差都等于零</h2><p>真实测量中存在噪声，通常不存在某个状态可以让所有残差同时严格为零。</p>
+<p>例如，同一个静止目标被多次测量，得到：</p>
+<div class="math-display">\[5.01\,\text{m},\qquad 4.98\,\text{m},\qquad 5.04\,\text{m}\]</div>
+<p>不可能找到一个距离同时严格等于这三个数。优化追求的不是：</p>
+<div class="math-display">\[\mathbf{r}_i(\mathbf{x})=\mathbf{0},\qquad \forall i\]</div>
+<p>而是让所有残差在噪声模型和鲁棒核的作用下，整体尽可能合理。</p>
+<p>这种平衡需要同时考虑测量噪声、传感器精度、约束数量、几何结构、先验信息、异常值以及不同状态之间的联系。换句话说，非线性优化在回答：</p>
+<blockquote>
+<p>当所有测量都不完美时，哪一组状态最能解释已经看到的全部信息？</p>
+</blockquote>
+<h2 id="8-为什么是“非线性”优化？"><a href="#8-为什么是“非线性”优化？" class="headerlink" title="8. 为什么是“非线性”优化？"></a>8. 为什么是“非线性”优化？</h2><p>因为机器人系统中的运动模型和观测模型通常是非线性的。</p>
+<h3 id="8-1-旋转本身就是非线性的"><a href="#8-1-旋转本身就是非线性的" class="headerlink" title="8.1 旋转本身就是非线性的"></a>8.1 旋转本身就是非线性的</h3><p>二维旋转可以写成：</p>
+<div class="math-display">\[\mathbf{R}(\theta)
+=
+\begin{bmatrix}
+\cos\theta &amp; -\sin\theta \\
+\sin\theta &amp; \cos\theta
+\end{bmatrix}\]</div>
+<p>一个点经过旋转和平移后变为：</p>
+<div class="math-display">\[\mathbf{p}'
+=
+\mathbf{R}(\theta)\mathbf{p}+\mathbf{t}\]</div>
+<p>其中包含 <span class="math-inline">\(\sin\theta\)</span> 和 <span class="math-inline">\(\cos\theta\)</span>，状态与观测之间不再是简单的线性关系。三维旋转还位于 <span class="math-inline">\(\mathrm{SO}(3)\)</span> 流形上，不能把旋转矩阵的九个元素当成彼此独立的普通数直接相加。</p>
+<h3 id="8-2-相机投影包含除法"><a href="#8-2-相机投影包含除法" class="headerlink" title="8.2 相机投影包含除法"></a>8.2 相机投影包含除法</h3><p>三维点在相机坐标系中为 <span class="math-inline">\(\mathbf{P}_c=[X_c,Y_c,Z_c]^T\)</span>，投影到图像平面得到：</p>
+<div class="math-display">\[u=f_x\frac{X_c}{Z_c}+c_x,
+\qquad
+v=f_y\frac{Y_c}{Z_c}+c_y\]</div>
+<p>这里既包含旋转和平移，又包含除法，因此重投影残差是典型的非线性函数。</p>
+<h3 id="8-3-激光点到平面的距离也依赖旋转"><a href="#8-3-激光点到平面的距离也依赖旋转" class="headerlink" title="8.3 激光点到平面的距离也依赖旋转"></a>8.3 激光点到平面的距离也依赖旋转</h3><p>激光 SLAM 中常见的点到平面残差为：</p>
+<div class="math-display">\[r
+=
+\mathbf{n}^{T}
+\left(
+\mathbf{R}\mathbf{p}+\mathbf{t}-\mathbf{q}
+\right)\]</div>
+<p>其中 <span class="math-inline">\(\mathbf{p}\)</span> 是当前帧激光点，<span class="math-inline">\((\mathbf{R},\mathbf{t})\)</span> 是待估计位姿，<span class="math-inline">\(\mathbf{q}\)</span> 是地图平面上的点，<span class="math-inline">\(\mathbf{n}\)</span> 是单位法向量。由于 <span class="math-inline">\(\mathbf{R}\)</span> 依赖旋转参数，残差仍然是非线性的。</p>
+<h3 id="8-4-IMU-状态传播同样是非线性的"><a href="#8-4-IMU-状态传播同样是非线性的" class="headerlink" title="8.4 IMU 状态传播同样是非线性的"></a>8.4 IMU 状态传播同样是非线性的</h3><p>IMU 中的姿态、速度和位置互相耦合。姿态决定机体系加速度如何旋转到世界坐标系，而速度和位置又需要对加速度积分。姿态传播常写成类似：</p>
+<div class="math-display">\[\dot{\mathbf{R}}
+=
+\mathbf{R}
+\left[
+\boldsymbol{\omega}_m-\mathbf{b}_g-\mathbf{n}_g
+\right]_{\times}\]</div>
+<p>旋转、偏置和积分共同使状态传播成为非线性过程。</p>
+<figure class="nonlinear-optimization-figure nonlinear-optimization-figure-wide">
+  <img src="/images/nonlinear-optimization/03-nonlinear-sources.png" alt="" aria-label="图 3 SLAM 中旋转、相机投影、点到平面几何和 IMU 积分引入非线性">
+</figure>
+
+<p>旋转、投影、几何距离和惯性积分，都会让 SLAM 变成非线性问题。</p>
+<h2 id="9-非线性优化是怎么找到答案的？"><a href="#9-非线性优化是怎么找到答案的？" class="headerlink" title="9. 非线性优化是怎么找到答案的？"></a>9. 非线性优化是怎么找到答案的？</h2><p>非线性问题通常不能一步求出最终答案。优化器会从一个初始状态出发，在当前状态附近建立局部近似。</p>
+<p>若状态增量为 <span class="math-inline">\(\delta\mathbf{x}\)</span>，残差可以在当前点附近线性化为：</p>
+<div class="math-display">\[\mathbf{r}(\mathbf{x}\boxplus\delta\mathbf{x})
+\approx
+\mathbf{r}(\mathbf{x})
++
+\mathbf{J}\delta\mathbf{x}\]</div>
+<p>这里的 <span class="math-inline">\(\boxplus\)</span> 表示按照状态所在空间进行更新：普通向量可以直接相加，旋转则需要通过指数映射等方式更新。<span class="math-inline">\(\mathbf{J}\)</span> 是残差对状态增量的雅可比矩阵。</p>
+<p>以 Gauss–Newton 为例，线性化后会形成类似的正规方程：</p>
+<div class="math-display">\[\mathbf{H}\delta\mathbf{x}=-\mathbf{b}\]</div>
+<p>其中：</p>
+<div class="math-display">\[\mathbf{H}=\mathbf{J}^{T}\mathbf{W}\mathbf{J},
+\qquad
+\mathbf{b}=\mathbf{J}^{T}\mathbf{W}\mathbf{r}\]</div>
+<p>求出增量后，用 <span class="math-inline">\(\mathbf{x}\leftarrow\mathbf{x}\boxplus\delta\mathbf{x}\)</span> 更新状态，再在新状态处重新计算残差和雅可比。Levenberg–Marquardt 会在这个局部模型上加入阻尼，让更新在 Gauss–Newton 步和梯度下降步之间调节。</p>
+<p>整个过程可以想成：一个人站在山坡上，无法一眼看清全部地形，只能观察脚下附近的坡度和弯曲程度，迈出一步后再重新观察。</p>
+<figure class="nonlinear-optimization-figure nonlinear-optimization-figure-wide">
+  <img src="/images/nonlinear-optimization/04-cost-surface-corrected.png" alt="" aria-label="图 4 优化器从初始状态出发，利用当前局部近似逐步走向局部低点">
+</figure>
+
+<p>因此，非线性优化通常依赖初始值，并且一般只能保证找到初值附近的局部较优解，而不是全局最优解。</p>
+<p>后面的笔记会继续解释：梯度如何给出下降方向，Hessian 如何描述局部曲率，Gauss–Newton 如何利用残差结构构造增量，LM 如何控制步长，以及 Cholesky、QR 和 PCG 如何真正解出线性方程。</p>
+<h2 id="10-非线性优化在-SLAM-中到底出现在哪里？"><a href="#10-非线性优化在-SLAM-中到底出现在哪里？" class="headerlink" title="10. 非线性优化在 SLAM 中到底出现在哪里？"></a>10. 非线性优化在 SLAM 中到底出现在哪里？</h2><p>非线性优化并不只存在于所谓的“SLAM 后端”。从局部配准和位姿跟踪，到回环和全局建图，它几乎贯穿整个系统。</p>
+<h3 id="10-1-ICP：寻找两帧点云之间的变换"><a href="#10-1-ICP：寻找两帧点云之间的变换" class="headerlink" title="10.1 ICP：寻找两帧点云之间的变换"></a>10.1 ICP：寻找两帧点云之间的变换</h3><p>ICP 希望找到旋转和平移，使当前点云与目标点云尽可能对齐：</p>
+<div class="math-display">\[\min_{\mathbf{R},\mathbf{t}}
+\sum_i
+\left\|
+\mathbf{R}\mathbf{p}_i+\mathbf{t}-\mathbf{q}_i
+\right\|^2\]</div>
+<p>在对应关系固定时，点到点配准可以通过 SVD 得到闭式解。但完整 ICP 还要交替更新对应关系与位姿；点到面 ICP、鲁棒核和更复杂的配准形式，通常会采用迭代优化。</p>
+<h3 id="10-2-LOAM：利用点到线和点到面残差估计位姿"><a href="#10-2-LOAM：利用点到线和点到面残差估计位姿" class="headerlink" title="10.2 LOAM：利用点到线和点到面残差估计位姿"></a>10.2 LOAM：利用点到线和点到面残差估计位姿</h3><p>LOAM 从点云中提取边缘和平面特征，构造点到线、点到面的几何残差，再不断调整 LiDAR 位姿，使当前点云特征与地图特征尽可能对齐：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">寻找特征对应</span><br><span class="line">    ↓</span><br><span class="line">构造几何残差</span><br><span class="line">    ↓</span><br><span class="line">计算位姿增量</span><br><span class="line">    ↓</span><br><span class="line">更新位姿</span><br><span class="line">    ↓</span><br><span class="line">重新寻找对应</span><br></pre></td></tr></table></figure>
+
+<h3 id="10-3-ORB-SLAM：最小化重投影误差"><a href="#10-3-ORB-SLAM：最小化重投影误差" class="headerlink" title="10.3 ORB-SLAM：最小化重投影误差"></a>10.3 ORB-SLAM：最小化重投影误差</h3><p>ORB-SLAM 中的 Bundle Adjustment 会同时调整多个相机位姿和三维地图点，使地图点重新投影到图像后尽量接近真实特征点：</p>
+<div class="math-display">\[\min_{\{\mathbf{T}_i\},\{\mathbf{P}_j\}}
+\sum_{(i,j)\in\mathcal{O}}
+\left\|
+\mathbf{z}_{ij}-\pi(\mathbf{T}_i\mathbf{P}_j)
+\right\|^2\]</div>
+<p>这是典型的非线性最小二乘问题。</p>
+<h3 id="10-4-DSO：直接最小化图像亮度差异"><a href="#10-4-DSO：直接最小化图像亮度差异" class="headerlink" title="10.4 DSO：直接最小化图像亮度差异"></a>10.4 DSO：直接最小化图像亮度差异</h3><p>DSO 不依赖传统特征描述子，而是直接比较同一空间点在不同图像中的光度一致性。简化的光度残差可以写成：</p>
+<div class="math-display">\[r
+=
+I_j(\mathbf{u}_j)-I_i(\mathbf{u}_i)\]</div>
+<p>实际模型还会考虑曝光和仿射亮度参数，并联合优化相机位姿与点的逆深度。</p>
+<h3 id="10-5-VINS-Mono：联合优化视觉和-IMU-状态"><a href="#10-5-VINS-Mono：联合优化视觉和-IMU-状态" class="headerlink" title="10.5 VINS-Mono：联合优化视觉和 IMU 状态"></a>10.5 VINS-Mono：联合优化视觉和 IMU 状态</h3><p>VINS-Mono 的滑动窗口中会同时包含多个时刻的位姿、速度、IMU 偏置、相机与 IMU 外参，以及特征点逆深度。它联合使用视觉重投影残差、IMU 预积分残差和边缘化先验残差，是典型的多状态、多传感器非线性优化问题。</p>
+<h3 id="10-6-LIO-SAM：用因子图组织约束"><a href="#10-6-LIO-SAM：用因子图组织约束" class="headerlink" title="10.6 LIO-SAM：用因子图组织约束"></a>10.6 LIO-SAM：用因子图组织约束</h3><p>LIO-SAM 使用因子图组织激光里程计、IMU 预积分、GPS 和回环等约束。每个因子都可以看成一个残差项，图结构则把变量与残差之间的稀疏关系明确表达出来。</p>
+<p>因子图没有创造一套与最小二乘完全不同的数学；它更像是一种组织变量、约束和稀疏结构的方式。</p>
+<h3 id="10-7-FAST-LIO2：迭代滤波与优化紧密相关"><a href="#10-7-FAST-LIO2：迭代滤波与优化紧密相关" class="headerlink" title="10.7 FAST-LIO2：迭代滤波与优化紧密相关"></a>10.7 FAST-LIO2：迭代滤波与优化紧密相关</h3><p>FAST-LIO2 的主体是紧耦合迭代卡尔曼滤波，而不是滑动窗口式批量优化。它用 IMU 传播得到状态先验，再用当前点云到地图的几何约束反复更新状态。</p>
+<p>从最大后验估计的角度，一次线性化后的更新可以理解为同时平衡状态先验和激光观测：</p>
+<div class="math-display">\[\min_{\delta\mathbf{x}}
+\frac{1}{2}
+\left\|\delta\mathbf{x}\right\|_{\mathbf{P}}^2
++
+\frac{1}{2}
+\left\|
+\mathbf{r}+\mathbf{J}\delta\mathbf{x}
+\right\|_{\mathbf{R}}^2\]</div>
+<p>其中 <span class="math-inline">\(\mathbf{P}\)</span> 描述先验不确定性，<span class="math-inline">\(\mathbf{R}\)</span> 描述测量噪声。这个视角能解释 IESKF 的迭代更新为什么与 Gauss–Newton 很相似，但二者的状态组织、先验传播和计算框架并不完全相同。</p>
+<h2 id="11-前端和后端，分别在做什么？"><a href="#11-前端和后端，分别在做什么？" class="headerlink" title="11. 前端和后端，分别在做什么？"></a>11. 前端和后端，分别在做什么？</h2><p>SLAM 经常被划分为前端和后端，但这不是一条绝对边界。很多前端模块本身也会进行局部优化，前后端之间还可能通过数据关联和状态估计反复反馈。</p>
+<p>前端更关注<strong>从传感器数据中建立约束</strong>，常见任务包括：</p>
+<ul>
+<li>特征提取与匹配；</li>
+<li>点云配准；</li>
+<li>数据关联；</li>
+<li>局部运动估计；</li>
+<li>回环候选检测。</li>
+</ul>
+<p>后端更关注<strong>利用这些约束调整状态</strong>，常见任务包括：</p>
+<ul>
+<li>构造残差和雅可比；</li>
+<li>建立并求解线性化方程；</li>
+<li>更新位姿、速度、偏置和地图；</li>
+<li>处理回环后的全局一致性。</li>
+</ul>
+<p>可以先把二者的关系概括为：</p>
+<blockquote>
+<p>前端负责从数据中找约束，后端负责让所有约束在整体上尽量一致。</p>
+</blockquote>
+<figure class="nonlinear-optimization-figure nonlinear-optimization-figure-wide">
+  <img src="/images/nonlinear-optimization/05-slam-pipeline.png" alt="" aria-label="图 5 从传感器输入、前端数据关联、残差构造到后端优化和地图输出">
+</figure>
+
+<p>在点云配准中，当前位姿会影响数据关联，新的数据关联又会影响下一轮位姿优化。因此前端和后端经常形成迭代闭环，而不是两个互不相干的盒子。</p>
+<h2 id="12-优化能解决所有问题吗？"><a href="#12-优化能解决所有问题吗？" class="headerlink" title="12. 优化能解决所有问题吗？"></a>12. 优化能解决所有问题吗？</h2><p>不能。非线性优化只能在现有观测和模型的基础上寻找较优解，它不是把错误输入自动变正确的魔法。</p>
+<h3 id="12-1-初始值太差"><a href="#12-1-初始值太差" class="headerlink" title="12.1 初始值太差"></a>12.1 初始值太差</h3><p>非线性优化通常依赖初始值。如果初始位姿离真实值太远，数据关联可能全部错误，最终会收敛到完全错误的位置，甚至无法收敛。</p>
+<h3 id="12-2-环境缺少约束"><a href="#12-2-环境缺少约束" class="headerlink" title="12.2 环境缺少约束"></a>12.2 环境缺少约束</h3><p>在长走廊、单平面和隧道场景中，某些运动方向没有足够的几何信息。这时不是优化器不够聪明，而是观测中确实缺少区分这些状态的信息。</p>
+<h3 id="12-3-存在大量错误匹配"><a href="#12-3-存在大量错误匹配" class="headerlink" title="12.3 存在大量错误匹配"></a>12.3 存在大量错误匹配</h3><p>如果大量激光点匹配到错误平面，或图像特征发生错误关联，优化器可能非常认真地把系统带向错误答案。鲁棒核和离群点剔除可以缓解问题，但不能替代可靠的数据关联。</p>
+<h3 id="12-4-模型本身不准确"><a href="#12-4-模型本身不准确" class="headerlink" title="12.4 模型本身不准确"></a>12.4 模型本身不准确</h3><p>如果没有正确处理时间同步误差、传感器外参、滚动快门、动态物体、轮胎打滑或 IMU 偏置，那么优化器只是在对一个错误模型进行精确求解。结果可能“数学上收敛”，物理上却是错的。</p>
+<h3 id="12-5-权重设置不合理"><a href="#12-5-权重设置不合理" class="headerlink" title="12.5 权重设置不合理"></a>12.5 权重设置不合理</h3><p>如果系统过度相信一个已经失效的传感器，它仍会强行拉动最终结果。优化不仅需要残差，还要合理描述每类残差的不确定性，并在必要时使用鲁棒核或自适应权重。</p>
+<h2 id="13-“代价下降”不等于“状态正确”"><a href="#13-“代价下降”不等于“状态正确”" class="headerlink" title="13. “代价下降”不等于“状态正确”"></a>13. “代价下降”不等于“状态正确”</h2><p>这是工程中经常被忽略的一点。假设优化器报告：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">Initial cost: 1284.6</span><br><span class="line">Final cost: 12.3</span><br><span class="line">Convergence: SUCCESS</span><br></pre></td></tr></table></figure>
+
+<p>它只说明优化器找到了一组让<strong>当前目标函数</strong>明显下降的状态，并不能直接证明：</p>
+<ul>
+<li>数据关联正确；</li>
+<li>坐标系和外参正确；</li>
+<li>残差与雅可比实现正确；</li>
+<li>目标函数设计合理；</li>
+<li>状态接近真实值。</li>
+</ul>
+<p>假如残差公式本身写错了，优化器仍然可能把这个错误目标优化得很好。因此调试 SLAM 优化问题时，不能只看最终 cost，还要检查：</p>
+<ul>
+<li>轨迹是否符合物理常识；</li>
+<li>地图是否重合、是否出现重影；</li>
+<li>残差的量纲与分布是否合理；</li>
+<li>雅可比是否通过数值检查；</li>
+<li>状态增量是否符合物理规律；</li>
+<li>结果是否在不同数据集和初值下稳定。</li>
+</ul>
+<h2 id="14-本篇总结：机器人为什么需要非线性优化？"><a href="#14-本篇总结：机器人为什么需要非线性优化？" class="headerlink" title="14. 本篇总结：机器人为什么需要非线性优化？"></a>14. 本篇总结：机器人为什么需要非线性优化？</h2><p>现在可以回到文章开头的问题。机器人拥有相机、激光雷达、IMU、轮速计和 GPS，为什么仍然离不开非线性优化？</p>
+<p>因为：</p>
+<ol>
+<li><strong>传感器给出的只是间接测量，不是完整状态；</strong></li>
+<li><strong>所有测量都存在噪声、偏差和失效场景；</strong></li>
+<li><strong>不同传感器的观测可能互相矛盾；</strong></li>
+<li><strong>机器人状态与观测之间通常是非线性关系；</strong></li>
+<li><strong>通常不存在一个状态能严格满足所有观测；</strong></li>
+<li><strong>机器人只能寻找一组整体上最能解释所有测量的状态。</strong></li>
+</ol>
+<p>整个过程可以概括为：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">定义待估计状态</span><br><span class="line">    ↓</span><br><span class="line">根据状态预测传感器观测</span><br><span class="line">    ↓</span><br><span class="line">比较预测和真实观测</span><br><span class="line">    ↓</span><br><span class="line">构造残差与加权代价函数</span><br><span class="line">    ↓</span><br><span class="line">计算状态修正量</span><br><span class="line">    ↓</span><br><span class="line">更新状态并重新线性化</span><br><span class="line">    ↓</span><br><span class="line">直到满足收敛条件</span><br></pre></td></tr></table></figure>
+
+<figure class="nonlinear-optimization-figure nonlinear-optimization-figure-wide">
+  <img src="/images/nonlinear-optimization/06-summary.png" alt="" aria-label="图 6 从多传感器观测、预测和残差到迭代优化后的机器人状态">
+</figure>
+
+<p>最终，机器人要解决的并不是“哪一个传感器绝对正确”，而是：</p>
+<blockquote>
+<p>在所有测量都不完美的情况下，哪一组状态最合理？</p>
+</blockquote>
+<p>这就是非线性优化在机器人系统中的核心作用。</p>
+<h2 id="15-下一篇：残差到底是什么？"><a href="#15-下一篇：残差到底是什么？" class="headerlink" title="15. 下一篇：残差到底是什么？"></a>15. 下一篇：残差到底是什么？</h2><p>这一篇多次提到了状态、观测、预测、残差和代价函数，但还有一些问题值得单独展开：</p>
+<ul>
+<li>状态变量应该如何选择？</li>
+<li>观测和预测有什么区别？</li>
+<li>残差的正负号重要吗？</li>
+<li>标量残差和向量残差有什么不同？</li>
+<li>为什么不同残差不能不加处理地直接相加？</li>
+<li>协方差矩阵和信息矩阵分别表达什么？</li>
+<li>一个完整的 SLAM 优化问题，如何从传感器数据一步步构造出来？</li>
+</ul>
+<p>下一篇将进入整个非线性优化系列最基础、也最重要的结构：</p>
+<div class="math-display">\[\boxed{
+\text{状态}
++
+\text{观测}
++
+\text{预测}
++
+\text{残差}
++
+\text{代价函数}
+}\]</div>
+<p>下一篇标题：</p>
+<blockquote>
+<p>《状态、观测、预测、残差与代价函数：SLAM 优化问题是怎么构造出来的？》</p>
+</blockquote>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://luomengwei.github.io/2026/07/29/why-robots-need-nonlinear-optimization/" data-id="cuidwK7DkD6JfeG8rtv0TyeMc" data-title="机器人为什么离不开非线性优化？" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/SLAM/" rel="tag">SLAM</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E6%9C%80%E5%B0%8F%E4%BA%8C%E4%B9%98/" rel="tag">最小二乘</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA/" rel="tag">机器人</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/" rel="tag">状态估计</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/" rel="tag">非线性优化</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2026/08/01/slam-state-observation-prediction-residual-cost-function/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">前一篇</strong>
+      <div class="article-nav-title">
+        
+          状态、观测、预测、残差与代价函数：SLAM 优化问题是怎么构造出来的？
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2026/07/28/ukf-ckf-particle-filter-overview/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">后一篇</strong>
+      <div class="article-nav-title">除了 EKF，还有哪些滤波方法？UKF、CKF、粒子滤波简单聊聊</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分类</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM/">SLAM</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/">状态估计</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/">非线性优化</a></li></ul></li><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/">SLAM学习笔记</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%95%B0%E5%AD%A6%E5%9F%BA%E7%A1%80/">数学基础</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%95%B0%E5%AD%A6%E5%9F%BA%E7%A1%80/%E4%BC%98%E5%8C%96%E6%96%B9%E6%B3%95/">优化方法</a></li></ul></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/CKF/" rel="tag">CKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/EKF/" rel="tag">EKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESKF/" rel="tag">ESKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/FAST-LIO2/" rel="tag">FAST-LIO2</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Hessian/" rel="tag">Hessian</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IEKF/" rel="tag">IEKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IESKF/" rel="tag">IESKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Jacobian/" rel="tag">Jacobian</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/KF/" rel="tag">KF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LiDAR-IMU/" rel="tag">LiDAR-IMU</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SLAM/" rel="tag">SLAM</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/UKF/" rel="tag">UKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%BB%A3%E4%BB%B7%E5%87%BD%E6%95%B0/" rel="tag">代价函数</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%BC%98%E5%8C%96/" rel="tag">优化</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" rel="tag">传感器融合</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%8D%8F%E6%96%B9%E5%B7%AE/" rel="tag">协方差</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%A4%9A%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" rel="tag">多传感器融合</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">扩展卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%80%E5%A4%A7%E4%BC%BC%E7%84%B6%E4%BC%B0%E8%AE%A1/" rel="tag">最大似然估计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%80%E5%A4%A7%E5%90%8E%E9%AA%8C%E4%BC%B0%E8%AE%A1/" rel="tag">最大后验估计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%80%E5%B0%8F%E4%BA%8C%E4%B9%98/" rel="tag">最小二乘</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA/" rel="tag">机器人</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA%E5%AE%9A%E4%BD%8D/" rel="tag">机器人定位</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%A2%AF%E5%BA%A6/" rel="tag">梯度</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%A2%AF%E5%BA%A6%E4%B8%8B%E9%99%8D/" rel="tag">梯度下降</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%AE%8B%E5%B7%AE/" rel="tag">残差</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%B3%B0%E5%8B%92%E5%B1%95%E5%BC%80/" rel="tag">泰勒展开</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%BF%80%E5%85%89%E6%83%AF%E6%80%A7%E9%87%8C%E7%A8%8B%E8%AE%A1/" rel="tag">激光惯性里程计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%89%9B%E9%A1%BF%E6%B3%95/" rel="tag">牛顿法</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/" rel="tag">状态估计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%B2%92%E5%AD%90%E6%BB%A4%E6%B3%A2/" rel="tag">粒子滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%BA%BF%E6%80%A7%E5%8C%96/" rel="tag">线性化</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E8%AF%AF%E5%B7%AE%E7%8A%B6%E6%80%81%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">误差状态卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E8%BF%AD%E4%BB%A3%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">迭代扩展卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%9B%85%E5%8F%AF%E6%AF%94/" rel="tag">雅可比</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/" rel="tag">非线性优化</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%AB%98%E6%96%AF%E5%88%86%E5%B8%83/" rel="tag">高斯分布</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签云</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/CKF/" style="font-size: 10px;">CKF</a> <a href="/tags/EKF/" style="font-size: 10px;">EKF</a> <a href="/tags/ESKF/" style="font-size: 11.67px;">ESKF</a> <a href="/tags/FAST-LIO2/" style="font-size: 15px;">FAST-LIO2</a> <a href="/tags/Hessian/" style="font-size: 11.67px;">Hessian</a> <a href="/tags/IEKF/" style="font-size: 11.67px;">IEKF</a> <a href="/tags/IESKF/" style="font-size: 13.33px;">IESKF</a> <a href="/tags/Jacobian/" style="font-size: 10px;">Jacobian</a> <a href="/tags/KF/" style="font-size: 10px;">KF</a> <a href="/tags/LiDAR-IMU/" style="font-size: 11.67px;">LiDAR-IMU</a> <a href="/tags/SLAM/" style="font-size: 20px;">SLAM</a> <a href="/tags/UKF/" style="font-size: 10px;">UKF</a> <a href="/tags/%E4%BB%A3%E4%BB%B7%E5%87%BD%E6%95%B0/" style="font-size: 10px;">代价函数</a> <a href="/tags/%E4%BC%98%E5%8C%96/" style="font-size: 11.67px;">优化</a> <a href="/tags/%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" style="font-size: 10px;">传感器融合</a> <a href="/tags/%E5%8D%8F%E6%96%B9%E5%B7%AE/" style="font-size: 10px;">协方差</a> <a href="/tags/%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 16.67px;">卡尔曼滤波</a> <a href="/tags/%E5%A4%9A%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" style="font-size: 10px;">多传感器融合</a> <a href="/tags/%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">扩展卡尔曼滤波</a> <a href="/tags/%E6%9C%80%E5%A4%A7%E4%BC%BC%E7%84%B6%E4%BC%B0%E8%AE%A1/" style="font-size: 10px;">最大似然估计</a> <a href="/tags/%E6%9C%80%E5%A4%A7%E5%90%8E%E9%AA%8C%E4%BC%B0%E8%AE%A1/" style="font-size: 10px;">最大后验估计</a> <a href="/tags/%E6%9C%80%E5%B0%8F%E4%BA%8C%E4%B9%98/" style="font-size: 13.33px;">最小二乘</a> <a href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA/" style="font-size: 10px;">机器人</a> <a href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA%E5%AE%9A%E4%BD%8D/" style="font-size: 13.33px;">机器人定位</a> <a href="/tags/%E6%A2%AF%E5%BA%A6/" style="font-size: 11.67px;">梯度</a> <a href="/tags/%E6%A2%AF%E5%BA%A6%E4%B8%8B%E9%99%8D/" style="font-size: 10px;">梯度下降</a> <a href="/tags/%E6%AE%8B%E5%B7%AE/" style="font-size: 10px;">残差</a> <a href="/tags/%E6%B3%B0%E5%8B%92%E5%B1%95%E5%BC%80/" style="font-size: 13.33px;">泰勒展开</a> <a href="/tags/%E6%BF%80%E5%85%89%E6%83%AF%E6%80%A7%E9%87%8C%E7%A8%8B%E8%AE%A1/" style="font-size: 10px;">激光惯性里程计</a> <a href="/tags/%E7%89%9B%E9%A1%BF%E6%B3%95/" style="font-size: 11.67px;">牛顿法</a> <a href="/tags/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/" style="font-size: 18.33px;">状态估计</a> <a href="/tags/%E7%B2%92%E5%AD%90%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">粒子滤波</a> <a href="/tags/%E7%BA%BF%E6%80%A7%E5%8C%96/" style="font-size: 10px;">线性化</a> <a href="/tags/%E8%AF%AF%E5%B7%AE%E7%8A%B6%E6%80%81%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">误差状态卡尔曼滤波</a> <a href="/tags/%E8%BF%AD%E4%BB%A3%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">迭代扩展卡尔曼滤波</a> <a href="/tags/%E9%9B%85%E5%8F%AF%E6%AF%94/" style="font-size: 10px;">雅可比</a> <a href="/tags/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/" style="font-size: 15px;">非线性优化</a> <a href="/tags/%E9%AB%98%E6%96%AF%E5%88%86%E5%B8%83/" style="font-size: 10px;">高斯分布</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">归档</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/08/">八月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/07/">七月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/06/">六月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/05/">五月 2026</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/08/05/taylor-linearization-jacobian-slam-iteration/">泰勒展开、线性化与雅可比：非线性问题为什么要反复求解？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/08/03/least-squares-mle-map-robot-state-estimation/">最小二乘、最大似然与最大后验：为什么残差平方能够估计机器人状态？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/08/01/slam-state-observation-prediction-residual-cost-function/">状态、观测、预测、残差与代价函数：SLAM 优化问题是怎么构造出来的？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/07/29/why-robots-need-nonlinear-optimization/">机器人为什么离不开非线性优化？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/07/28/ukf-ckf-particle-filter-overview/">除了 EKF，还有哪些滤波方法？UKF、CKF、粒子滤波简单聊聊</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 Tomato<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+<script>window.MathJax = {  tex: {    inlineMath: [['\\(', '\\)']],    displayMath: [['\\[', '\\]']],    processEscapes: true  },  options: {    skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']  },  chtml: {    scale: 1.08  }};</script><script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script></body>
+</html>

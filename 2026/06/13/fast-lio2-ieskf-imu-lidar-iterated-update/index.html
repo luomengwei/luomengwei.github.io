@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>FAST-LIO2 中的 IESKF：IMU 先预测，LiDAR 再反复纠正 | Tomato&#39;s Blog</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="从 KF、EKF、ESKF、IEKF 走到 FAST-LIO2，理解 IMU 预测、点云去畸变、scan-to-map、点到平面残差、ikd-Tree 和 IESKF 迭代更新如何串成一条状态估计主线。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="FAST-LIO2 中的 IESKF：IMU 先预测，LiDAR 再反复纠正">
+<meta property="og:url" content="https://luomengwei.github.io/2026/06/13/fast-lio2-ieskf-imu-lidar-iterated-update/index.html">
+<meta property="og:site_name" content="Tomato&#39;s Blog">
+<meta property="og:description" content="从 KF、EKF、ESKF、IEKF 走到 FAST-LIO2，理解 IMU 预测、点云去畸变、scan-to-map、点到平面残差、ikd-Tree 和 IESKF 迭代更新如何串成一条状态估计主线。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://luomengwei.github.io/images/fast-lio2-ieskf/fast-lio2-overall-state-estimation.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/fast-lio2-ieskf/imu-prediction-undistortion.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/fast-lio2-ieskf/point-to-plane-residual.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/fast-lio2-ieskf/fast-lio2-ieskf-iterated-update.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/fast-lio2-ieskf/error-state-injection.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/fast-lio2-ieskf/state-update-map-update.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/fast-lio2-ieskf/loose-vs-tight-coupling.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/fast-lio2-ieskf/kf-to-fast-lio2-mainline.png">
+<meta property="article:published_time" content="2026-06-12T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-07-28T13:07:51.899Z">
+<meta property="article:author" content="Tomato">
+<meta property="article:tag" content="FAST-LIO2">
+<meta property="article:tag" content="IESKF">
+<meta property="article:tag" content="LiDAR-IMU">
+<meta property="article:tag" content="SLAM">
+<meta property="article:tag" content="激光惯性里程计">
+<meta property="article:tag" content="状态估计">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://luomengwei.github.io/images/fast-lio2-ieskf/fast-lio2-overall-state-estimation.png">
+  
+    <link rel="alternate" href="/atom.xml" title="Tomato's Blog" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
+
+<!-- hexo injector head_end start --><link rel="stylesheet" href="/css/custom.css"><!-- hexo injector head_end end --><meta name="generator" content="Hexo 8.1.2"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Tomato&#39;s Blog</a>
+      </h1>
+      
+        <h2 id="subtitle-wrap">
+          <a href="/" id="subtitle">Robotics, SLAM and LiDAR-IMU Notes</a>
+        </h2>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS 订阅"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="搜索"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜索"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://luomengwei.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-fast-lio2-ieskf-imu-lidar-iterated-update" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/06/13/fast-lio2-ieskf-imu-lidar-iterated-update/" class="article-date">
+  <time class="dt-published" datetime="2026-06-12T16:00:00.000Z" itemprop="datePublished">2026-06-13</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/SLAM/">SLAM</a>►<a class="article-category-link" href="/categories/SLAM/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/">状态估计</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      FAST-LIO2 中的 IESKF：IMU 先预测，LiDAR 再反复纠正
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <style>
+.fast-lio2-ieskf-figure {
+  margin: 1.45em auto 1.7em;
+  text-align: center;
+}
+.fast-lio2-ieskf-figure img {
+  display: block;
+  width: 68%;
+  max-width: 760px;
+  height: auto;
+  margin: 0 auto;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.fast-lio2-ieskf-figure-wide img {
+  width: 76%;
+  max-width: 860px;
+}
+.fast-lio2-ieskf-figure figcaption {
+  display: none;
+}
+.fast-lio2-state-list {
+  margin: 1.2em 0 1.6em;
+  padding: 1em 1.25em;
+  border-left: 4px solid #2f6fdd;
+  background: #f7faff;
+}
+.fast-lio2-state-list p {
+  margin: 0.35em 0;
+  line-height: 1.75;
+}
+@media (max-width: 720px) {
+  .fast-lio2-ieskf-figure img,
+  .fast-lio2-ieskf-figure-wide img {
+    width: 100%;
+  }
+}
+</style>
+
+<p>前面几篇笔记里，已经从最基础的卡尔曼滤波一路讲到了 IEKF。简单回顾一下：KF 解决线性系统里的预测和修正，EKF 用局部线性化处理非线性系统，ESKF 把状态拆成名义状态和误差状态，IEKF 则在同一帧观测更新里反复线性化、反复修正。</p>
+<p>这一篇终于把这些概念放到一个真实的 SLAM 系统里看：<strong>FAST-LIO2</strong>。</p>
+<span id="more"></span>
+
+<p>看 FAST-LIO2 论文或代码时，经常会遇到一些关键词：IMU propagation、point cloud undistortion、scan-to-map、ikd-Tree、point-to-plane residual、iterated Kalman filter、manifold state。单独看每个词都不算陌生，但第一次读时很容易连不成一条完整的线。</p>
+<p>这篇笔记的目标，就是把它们串起来。</p>
+<p>一句话概括 FAST-LIO2 里的状态估计逻辑：</p>
+<blockquote>
+<p><strong>IMU 先根据惯性测量预测当前状态，LiDAR 再根据点云和地图的几何残差反复纠正这个预测。</strong></p>
+</blockquote>
+<p>再口语一点：IMU 先给出一个“我觉得机器人到这里了”的高频预测；LiDAR 拿当前点云去对地图，发现几何上还有偏差，就把这个偏差交给滤波器；滤波器不会只改一次，而是在同一帧 LiDAR 更新里多次重新线性化、重新计算残差，直到修得差不多。</p>
+<p>这个“多看几遍、反复修正”的过程，就是前面讲过的 IEKF 思想。姿态、位置、速度、bias 等状态的误差表达，又和 ESKF 的思想非常接近。</p>
+<p>严格说，FAST-LIO2 使用的是基于流形状态的迭代卡尔曼滤波框架；从学习路线看，把它理解成“误差状态表达 + 迭代更新”的组合，会更容易入门。</p>
+<h2 id="1-FAST-LIO2-到底在解决什么问题？"><a href="#1-FAST-LIO2-到底在解决什么问题？" class="headerlink" title="1. FAST-LIO2 到底在解决什么问题？"></a>1. FAST-LIO2 到底在解决什么问题？</h2><p>FAST-LIO2 是一个 LiDAR-IMU 里程计与建图系统。它要解决的问题可以简单说成：给定连续的 LiDAR 点云和 IMU 数据，实时估计机器人运动轨迹，并增量构建周围环境地图。</p>
+<p>这里有两个传感器主角。</p>
+<p>IMU 频率高，适合短时间预测。机器人刚转一点、加速一点，IMU 很快就能感受到；但它的积分会随时间漂移，长时间单独使用会越来越不可靠。</p>
+<p>LiDAR 频率相对低一些，但能看到环境里的几何结构，比如墙面、地面、柱子、边缘。每来一帧点云，它就可以检查当前位姿和地图是否对得上。</p>
+<p>所以 FAST-LIO2 的核心配合关系是：IMU 负责高频预测，LiDAR 负责几何纠偏，滤波器把两者融合成状态估计，地图模块维护局部点云地图。</p>
+<p>把 IMU 预测、LiDAR 残差、迭代更新和地图维护放在一起，就得到 FAST-LIO2 前端的主循环：</p>
+<figure class="fast-lio2-ieskf-figure fast-lio2-ieskf-figure-wide">
+  <img src="/images/fast-lio2-ieskf/fast-lio2-overall-state-estimation.png" alt="" aria-label="图 1 FAST-LIO2 的整体状态估计流程">
+</figure>
+
+<p>这条主线后面会被拆成几个部分：IMU 如何预测状态，为什么点云要去畸变，scan-to-map 如何构建几何残差，IESKF 又如何在误差状态空间里反复修正。</p>
+<h2 id="2-FAST-LIO2-的状态里有什么？"><a href="#2-FAST-LIO2-的状态里有什么？" class="headerlink" title="2. FAST-LIO2 的状态里有什么？"></a>2. FAST-LIO2 的状态里有什么？</h2><p>为了估计机器人运动，FAST-LIO2 需要维护一组状态。不同实现和配置会略有差异，但常见状态可以理解为：</p>
+<ul>
+<li>姿态 <span class="math-inline">\(R\)</span>：描述机体当前朝向。</li>
+<li>位置 <span class="math-inline">\(p\)</span>：描述机体在世界或地图坐标系中的位置。</li>
+<li>速度 <span class="math-inline">\(v\)</span>：用于 IMU 状态传播。</li>
+<li>陀螺仪零偏 <span class="math-inline">\(b_g\)</span>：修正角速度测量里的慢变偏差。</li>
+<li>加速度计零偏 <span class="math-inline">\(b_a\)</span>：修正加速度测量里的慢变偏差。</li>
+<li>重力 <span class="math-inline">\(g\)</span>：描述重力方向和大小。</li>
+<li>LiDAR-IMU 外参 <span class="math-inline">\(R_{LI}, t_{LI}\)</span>：描述 LiDAR 坐标系和 IMU 坐标系之间的变换关系。</li>
+</ul>
+<p>简化写成一个状态向量，可以表示为：</p>
+<div class="math-display">\[x =
+\begin{bmatrix}
+R \\
+p \\
+v \\
+b_g \\
+b_a \\
+g \\
+R_{LI} \\
+t_{LI}
+\end{bmatrix}\]</div>
+<p>如果外参已经标定好，有些系统会把外参固定住；如果开启外参估计，外参也可以作为状态的一部分一起优化。</p>
+<p>这里先抓住一个重点：FAST-LIO2 不是只估计位置，它要同时维护姿态、位置、速度、IMU bias、重力以及可能的外参。这也是为什么它需要一个比普通“位姿匹配”更完整的状态估计框架。</p>
+<h2 id="3-IMU-传播：不只是“预测一下位姿”"><a href="#3-IMU-传播：不只是“预测一下位姿”" class="headerlink" title="3. IMU 传播：不只是“预测一下位姿”"></a>3. IMU 传播：不只是“预测一下位姿”</h2><p>前面我们说 IMU 负责高频预测，但这里的“预测”其实不只是简单地预测一个位置。</p>
+<p>在 LiDAR-IMU 系统里，IMU 传播通常会同时更新多个状态量，例如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">姿态 R</span><br><span class="line">位置 p</span><br><span class="line">速度 v</span><br><span class="line">陀螺仪零偏 bg</span><br><span class="line">加速度计零偏 ba</span><br><span class="line">协方差 P</span><br></pre></td></tr></table></figure>
+
+<p>其中，陀螺仪测到的是角速度，加速度计测到的是加速度。<br>但是 IMU 原始测量里一般包含零偏和噪声，所以系统在使用 IMU 数据前，通常会先做一个简单修正：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">真实角速度 ≈ 陀螺仪测量值 - 陀螺仪零偏</span><br><span class="line">真实加速度 ≈ 加速度计测量值 - 加速度计零偏</span><br></pre></td></tr></table></figure>
+
+<p>然后根据修正后的角速度积分姿态，根据修正后的加速度积分速度和位置。</p>
+<p>简单理解就是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">角速度 → 积分 → 姿态变化</span><br><span class="line">加速度 → 积分 → 速度变化</span><br><span class="line">速度 → 积分 → 位置变化</span><br></pre></td></tr></table></figure>
+
+<p>这也是为什么 IMU 很适合做短时间预测。</p>
+<p>但是，IMU 预测有一个天然问题：</p>
+<blockquote>
+<p>它是积分出来的。</p>
+</blockquote>
+<p>积分的特点是：<br>短时间内很好用，时间一长误差就会慢慢积累。</p>
+<p>一点点角速度误差，积分后会变成姿态误差；<br>一点点加速度误差，积分后会变成速度误差；<br>速度误差继续积分，又会变成位置误差。</p>
+<p>所以 IMU 就像一个反应很快但会慢慢漂的导航员：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">短时间：很靠谱</span><br><span class="line">长时间：容易越走越偏</span><br></pre></td></tr></table></figure>
+
+<p>因此，FAST-LIO2 不会只靠 IMU 一直往前推。<br>IMU 主要负责在 LiDAR 两帧之间提供连续运动预测，而 LiDAR 会周期性地利用地图几何结构把这个预测拉回来。</p>
+<p>也就是说：</p>
+<blockquote>
+<p>IMU 负责“先猜一个比较合理的初值”，LiDAR 负责“检查这个初值有没有偏”。</p>
+</blockquote>
+<hr>
+<h2 id="4-点云去畸变：为什么一帧点云也会变形？"><a href="#4-点云去畸变：为什么一帧点云也会变形？" class="headerlink" title="4. 点云去畸变：为什么一帧点云也会变形？"></a>4. 点云去畸变：为什么一帧点云也会变形？</h2><p>很多初学者刚接触 LiDAR 时，会下意识认为：</p>
+<blockquote>
+<p>一帧点云就是某一个时刻机器人周围环境的完整快照。</p>
+</blockquote>
+<p>但实际情况没这么理想。</p>
+<p>一帧 LiDAR 点云通常不是瞬间采完的，而是在一个扫描周期内陆续采集的。<br>比如一帧点云需要 0.1 秒采完，那么这一帧里的第一个点和最后一个点，采集时间其实相差了 0.1 秒。</p>
+<p>如果机器人在这 0.1 秒内静止不动，那问题不大。<br>但如果机器人正在移动或转弯，那么这一帧点云里的不同点，其实是在不同机器人位姿下采集的。</p>
+<p>于是就会出现运动畸变。</p>
+<p>可以这样理解：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">第一个点：机器人在 A 位姿时采到的</span><br><span class="line">中间的点：机器人在 B 位姿时采到的</span><br><span class="line">最后的点：机器人在 C 位姿时采到的</span><br></pre></td></tr></table></figure>
+
+<p>如果我们强行把这些点都当成同一时刻采集的，就会导致点云形状被拉扯。</p>
+<p>本来应该是一面平直的墙，可能在点云里变得有点弯；<br>本来应该对齐的结构，可能会出现轻微错位。</p>
+<p>这就像你用手机拍全景图时手抖了一下，最后画面里的直线可能会变歪。<br>LiDAR 点云也是类似，只不过它变形的是三维几何结构。</p>
+<p>FAST-LIO2 利用 IMU 的高频运动信息，可以估计扫描周期内机器人连续运动过程。<br>然后把这一帧点云中的每个点，根据它自己的采集时间，补偿到同一个参考时刻。</p>
+<p>这个过程就是点云去畸变。</p>
+<figure class="fast-lio2-ieskf-figure fast-lio2-ieskf-figure-wide">
+  <img src="/images/fast-lio2-ieskf/imu-prediction-undistortion.png" alt="" aria-label="图 2 IMU 预测与点云去畸变">
+</figure>
+
+<p>图 2 把这个关系画得更直观：左边是运动畸变如何产生，右边是 IMU 如何用高频运动估计把点云补偿回同一参考时刻。</p>
+<p>它的目的可以概括成一句话：</p>
+<blockquote>
+<p>把“不同时间、不同位姿下采到的点”，尽量统一到“同一个时刻、同一个位姿下”。</p>
+</blockquote>
+<p>这样后续 scan-to-map 匹配时，点云本身会更干净，点到平面残差也会更可靠。</p>
+<p>如果不做去畸变，后面的匹配可能会遇到一个很尴尬的问题：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">滤波器以为是位姿错了，</span><br><span class="line">但其实是点云自己已经被运动拉歪了。</span><br></pre></td></tr></table></figure>
+
+<p>所以，点云去畸变不是一个可有可无的小步骤。<br>它直接影响后面 LiDAR 几何残差的质量。</p>
+<hr>
+<h2 id="5-scan-to-map：LiDAR-是怎么和地图对齐的？"><a href="#5-scan-to-map：LiDAR-是怎么和地图对齐的？" class="headerlink" title="5. scan-to-map：LiDAR 是怎么和地图对齐的？"></a>5. scan-to-map：LiDAR 是怎么和地图对齐的？</h2><p>有了 IMU 的预测位姿和去畸变后的点云，接下来 FAST-LIO2 要做的事情就是：</p>
+<blockquote>
+<p>看看当前点云放到地图里以后，和已有地图对不对得上。</p>
+</blockquote>
+<p>这个过程叫 scan-to-map。</p>
+<p>这里的 scan 指当前帧 LiDAR 点云；<br>map 指系统已经维护好的局部地图。</p>
+<p>scan-to-map 的基本思路是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">1. 把当前帧点云根据预测位姿变换到地图坐标系；</span><br><span class="line">2. 对每个有效点，在地图中查找附近的邻近点；</span><br><span class="line">3. 用这些邻近点拟合一个局部平面；</span><br><span class="line">4. 计算当前点到这个平面的距离；</span><br><span class="line">5. 用这个距离作为几何残差；</span><br><span class="line">6. 根据大量残差修正当前位姿。</span><br></pre></td></tr></table></figure>
+
+<p>也就是说，LiDAR 并不是直接告诉系统：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">机器人现在的位置是 x = 1.2 m, y = 3.4 m。</span><br></pre></td></tr></table></figure>
+
+<p>它更像是在说：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">按照你当前估计的位姿，我把点云放进地图后，</span><br><span class="line">这些点好像没有很好地落在已有墙面、地面、柱面附近。</span><br><span class="line">所以你的位姿可能有点偏。</span><br></pre></td></tr></table></figure>
+
+<p>这就是 LiDAR 几何约束的意义。</p>
+<p>在 FAST-LIO2 中，地图通常由 ikd-Tree 维护。<br>ikd-Tree 可以理解成一个支持增量更新的高效点云索引结构。</p>
+<p>为什么需要它？</p>
+<p>因为每一帧 LiDAR 点云里有很多点，每个点都要去地图中找邻近点。<br>如果地图很大，而每次都暴力搜索附近点，计算量会非常大。</p>
+<p>ikd-Tree 的作用就是让系统能够快速回答：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">这个点附近有哪些地图点？</span><br><span class="line">这些点能不能形成一个局部平面？</span><br><span class="line">当前点离这个平面有多远？</span><br></pre></td></tr></table></figure>
+
+<p>所以，ikd-Tree 不是单纯为了“存地图”，而是为了让 scan-to-map 匹配能够实时运行。</p>
+<hr>
+<h2 id="6-点到平面残差：LiDAR-怎么告诉滤波器“你偏了”？"><a href="#6-点到平面残差：LiDAR-怎么告诉滤波器“你偏了”？" class="headerlink" title="6. 点到平面残差：LiDAR 怎么告诉滤波器“你偏了”？"></a>6. 点到平面残差：LiDAR 怎么告诉滤波器“你偏了”？</h2><p>FAST-LIO2 中常见的几何残差是点到平面残差。</p>
+<p>假设当前帧里有一个点 <span class="math-inline">\(p_i\)</span>，它原本在 LiDAR 坐标系下。<br>根据当前估计的位姿 <span class="math-inline">\((R, t)\)</span>，可以把它变换到地图坐标系：</p>
+<div class="math-display">\[p_i^w = R p_i + t\]</div>
+<p>然后系统在地图中找到这个点附近的一组邻近点。<br>如果这些邻近点大致落在同一个平面上，就可以拟合出一个局部平面。</p>
+<p>假设这个平面的法向量是 <span class="math-inline">\(n_i\)</span>，平面上一点是 <span class="math-inline">\(q_i\)</span>。<br>那么当前点到这个平面的距离可以写成：</p>
+<div class="math-display">\[r_i = n_i^T(p_i^w - q_i)\]</div>
+<p>代入 <span class="math-inline">\(p_i^w = R p_i + t\)</span>，就是：</p>
+<div class="math-display">\[r_i = n_i^T(Rp_i + t - q_i)\]</div>
+<p>这个 <span class="math-inline">\(r_i\)</span> 就是点到平面残差。</p>
+<figure class="fast-lio2-ieskf-figure">
+  <img src="/images/fast-lio2-ieskf/point-to-plane-residual.png" alt="" aria-label="图 3 点到平面残差的构建逻辑">
+</figure>
+
+<p>图 3 对应的就是这条链路：当前点先按位姿变换到地图坐标系，再找邻近点、拟合局部平面，最后得到点到平面的距离残差。</p>
+<p>如果 <span class="math-inline">\(r_i\)</span> 很小，说明当前点经过位姿变换后，比较好地落在地图局部平面附近。<br>这意味着当前位姿估计比较合理。</p>
+<p>如果 <span class="math-inline">\(r_i\)</span> 很大，说明当前点和地图平面对不上。<br>这时候就说明当前位姿可能需要修正。</p>
+<p>你可以把点到平面残差理解成 LiDAR 对滤波器说的一句话：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">如果你现在的位姿是对的，</span><br><span class="line">那这个点应该贴近地图里的这个平面。</span><br><span class="line">但它现在离得有点远，</span><br><span class="line">所以你大概率偏了。</span><br></pre></td></tr></table></figure>
+
+<p>单个点的残差可能不稳定。<br>但一帧点云里会有大量点，每个点都可以提供类似的几何约束。</p>
+<p>这些残差组合起来，就能帮助滤波器判断：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">姿态是不是偏了？</span><br><span class="line">位置是不是偏了？</span><br><span class="line">某些方向上的约束是不是强？</span><br><span class="line">某些方向是不是比较退化？</span><br></pre></td></tr></table></figure>
+
+<p>当然，这里也有一个重要前提：</p>
+<blockquote>
+<p>当前点找到的地图邻近点和拟合平面是正确的。</p>
+</blockquote>
+<p>如果邻近点找错了，或者环境本身几何结构很弱，那么残差也可能不可靠。</p>
+<p>比如长走廊场景中，沿走廊方向的几何约束就可能比较弱。<br>这时候 LiDAR 可能能很好地约束横向位置，却不一定能很好地约束前进方向。</p>
+<p>这也是后面讲退化场景时要重点讨论的问题。</p>
+<hr>
+<h2 id="7-为什么-FAST-LIO2-需要迭代更新？"><a href="#7-为什么-FAST-LIO2-需要迭代更新？" class="headerlink" title="7. 为什么 FAST-LIO2 需要迭代更新？"></a>7. 为什么 FAST-LIO2 需要迭代更新？</h2><p>前面点到平面残差写成：</p>
+<div class="math-display">\[r_i = n_i^T(Rp_i + t - q_i)\]</div>
+<p>这个式子里最麻烦的是 <span class="math-inline">\(R\)</span>。</p>
+<p>因为 <span class="math-inline">\(R\)</span> 是姿态，属于旋转空间，不是普通线性变量。<br>位姿变化一点，点云在地图中的位置也会变化。</p>
+<p>更进一步，当前位姿变化之后，下面这些东西都可能跟着变化：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">点云投影到地图中的位置</span><br><span class="line">邻近点搜索结果</span><br><span class="line">局部平面拟合结果</span><br><span class="line">点到平面残差</span><br><span class="line">残差对状态的雅可比</span><br></pre></td></tr></table></figure>
+
+<p>所以，LiDAR 更新不是一个简单的“一步到位”问题。</p>
+<p>如果只用 IMU 预测位姿线性化一次，可能出现这种情况：</p>
+<ol>
+<li>第一次预测位姿不够准。</li>
+<li>用这个不够准的位姿去找地图邻近点。</li>
+<li>拟合出来的平面也不一定完全合适。</li>
+<li>算出的残差和雅可比只是基于当前错误位姿的近似。</li>
+<li>更新一次后，位姿变好了。</li>
+<li>但对应关系和残差其实应该重新算。</li>
+</ol>
+<p>这就是 IEKF 的用武之地。</p>
+<p>FAST-LIO2 在 LiDAR 更新时，不是只做一次线性化和更新，而是在同一帧点云内进行多次迭代。</p>
+<p>每次迭代大概做这些事：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">1. 用当前状态把点云投到地图；</span><br><span class="line">2. 查找邻近点并拟合局部平面；</span><br><span class="line">3. 计算点到平面残差；</span><br><span class="line">4. 计算残差对误差状态的雅可比；</span><br><span class="line">5. 根据卡尔曼更新得到误差状态增量；</span><br><span class="line">6. 把误差注入名义状态；</span><br><span class="line">7. 判断是否收敛；</span><br><span class="line">8. 如果没有收敛，就基于新状态重新开始。</span><br></pre></td></tr></table></figure>
+
+<figure class="fast-lio2-ieskf-figure">
+  <img src="/images/fast-lio2-ieskf/fast-lio2-ieskf-iterated-update.png" alt="" aria-label="图 4 FAST-LIO2 中的 IESKF 迭代更新">
+</figure>
+
+<p>图 4 里的回环箭头强调的就是：每一次更新后，都要用新的状态重新理解当前点云和地图之间的关系。</p>
+<p>这就是“反复纠正”的含义。</p>
+<p>它不是简单地重复运行整个算法，而是在当前 LiDAR 帧内部，不断基于更新后的状态重新理解这一帧点云和地图之间的关系。</p>
+<p>所以可以这样理解：</p>
+<ul>
+<li><strong>第一次迭代</strong>：用 IMU 给的初值，大致对齐。</li>
+<li><strong>第二次迭代</strong>：用第一次更新后的状态，重新计算残差，进一步对齐。</li>
+<li><strong>第三次迭代</strong>：如果还有明显误差，再继续修正。</li>
+<li><strong>停止条件</strong>：状态增量很小，或者达到最大迭代次数。</li>
+</ul>
+<p>这就是 FAST-LIO2 中 IESKF 的直观作用。</p>
+<hr>
+<h2 id="8-IESKF-中的“误差状态”到底更新了什么？"><a href="#8-IESKF-中的“误差状态”到底更新了什么？" class="headerlink" title="8. IESKF 中的“误差状态”到底更新了什么？"></a>8. IESKF 中的“误差状态”到底更新了什么？</h2><p>在 FAST-LIO2 里，滤波器通常不会直接说：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">我要直接把完整位姿改掉。</span><br></pre></td></tr></table></figure>
+
+<p>更合理的做法是估计一个误差状态：</p>
+<div class="fast-lio2-state-list">
+  <p><span class="math-inline">\(\delta \theta\)</span>：姿态误差</p>
+  <p><span class="math-inline">\(\delta p\)</span>：位置误差</p>
+  <p><span class="math-inline">\(\delta v\)</span>：速度误差</p>
+  <p><span class="math-inline">\(\delta b_g\)</span>：陀螺仪零偏误差</p>
+  <p><span class="math-inline">\(\delta b_a\)</span>：加速度计零偏误差</p>
+  <p><span class="math-inline">\(\delta g\)</span>：重力误差</p>
+  <p><span class="math-inline">\(\delta R_{LI}, \delta t_{LI}\)</span>：外参误差</p>
+</div>
+
+<p>具体系统中状态量可能略有不同，但核心思路一样：</p>
+<blockquote>
+<p>滤波器估计的是当前名义状态错了多少。</p>
+</blockquote>
+<p>比如 LiDAR 残差告诉系统：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">当前点云整体在地图里有点向左偏，</span><br><span class="line">同时姿态可能也稍微转歪了一点。</span><br></pre></td></tr></table></figure>
+
+<p>那么滤波器可能会得到：</p>
+<div class="fast-lio2-state-list">
+  <p><span class="math-inline">\(\delta p\)</span>：位置需要往某个方向修正几厘米</p>
+  <p><span class="math-inline">\(\delta \theta\)</span>：姿态需要修正一个很小的角度</p>
+  <p><span class="math-inline">\(\delta v\)</span>：速度估计也要跟着调整一点</p>
+  <p><span class="math-inline">\(\delta b_g / \delta b_a\)</span>：IMU bias 可能也需要微调</p>
+</div>
+
+<p>然后系统把这些误差注入到名义状态里。</p>
+<p>位置、速度、bias 这类普通向量可以直接加：</p>
+<div class="math-display">\[p \leftarrow p + \delta p\]</div>
+<div class="math-display">\[v \leftarrow v + \delta v\]</div>
+<div class="math-display">\[b \leftarrow b + \delta b\]</div>
+<p>但是姿态不能直接加，而是用小角度扰动：</p>
+<div class="math-display">\[R \leftarrow R \cdot \operatorname{Exp}(\delta \theta)\]</div>
+<p>这就是误差状态注入。</p>
+<figure class="fast-lio2-ieskf-figure fast-lio2-ieskf-figure-wide">
+  <img src="/images/fast-lio2-ieskf/error-state-injection.png" alt="" aria-label="图 5 FAST-LIO2 中的误差状态注入">
+</figure>
+
+<p>图 5 把不同状态量的注入方式放在一起看：普通向量可以直接加，姿态则要通过小角度扰动进入旋转空间。</p>
+<p>注入完成后，误差状态会重新回到零附近。<br>也就是说，系统把刚刚估计出来的误差吸收到名义状态里，然后开始下一轮误差估计。</p>
+<p>这就是 ESKF 思想在 FAST-LIO2 中的体现。</p>
+<hr>
+<h2 id="9-为什么要先更新状态，再更新地图？"><a href="#9-为什么要先更新状态，再更新地图？" class="headerlink" title="9. 为什么要先更新状态，再更新地图？"></a>9. 为什么要先更新状态，再更新地图？</h2><p>FAST-LIO2 的另一个关键逻辑是：</p>
+<blockquote>
+<p>先用当前帧点云修正状态，再把当前帧点云插入地图。</p>
+</blockquote>
+<p>这个顺序很重要。</p>
+<p>如果当前位姿还没修正好，就直接把点云插入地图，地图可能会被污染。</p>
+<p>比如机器人实际在正确位置 A，但 IMU 预测有点偏，估计成了 A 附近的 A’。<br>如果你直接按照 A’ 把点云插入地图，原本应该重合的墙面可能会出现两层。</p>
+<p>这种现象在点云地图里常见表现为：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">墙面变厚</span><br><span class="line">边缘重影</span><br><span class="line">平面不清晰</span><br><span class="line">地图局部发糊</span><br><span class="line">后续匹配质量下降</span><br></pre></td></tr></table></figure>
+
+<p>更麻烦的是，地图一旦被错误点云污染，后面新的点云又会拿这个地图来匹配。<br>于是错误会继续影响后续状态估计。</p>
+<p>这就形成了一个不太好的循环：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">位姿不准</span><br><span class="line">↓</span><br><span class="line">错误点云插入地图</span><br><span class="line">↓</span><br><span class="line">地图质量下降</span><br><span class="line">↓</span><br><span class="line">后续 scan-to-map 匹配变差</span><br><span class="line">↓</span><br><span class="line">位姿更容易偏</span><br></pre></td></tr></table></figure>
+
+<figure class="fast-lio2-ieskf-figure">
+  <img src="/images/fast-lio2-ieskf/state-update-map-update.png" alt="" aria-label="图 6 状态更新与地图更新的关系">
+</figure>
+
+<p>图 6 强调的就是这个顺序：状态先被 LiDAR 残差修正，当前帧点云再按修正后的位姿插入地图。</p>
+<p>所以 FAST-LIO2 通常会先完成状态更新。<br>只有当当前帧位姿经过 LiDAR 残差修正后，才把当前帧点云按照更新后的位姿插入地图。</p>
+<p>这一步可以理解成：</p>
+<blockquote>
+<p>先把自己站稳，再往地图上画东西。</p>
+</blockquote>
+<p>如果自己都没站稳，画出来的地图自然容易歪。</p>
+<hr>
+<h2 id="10-FAST-LIO2-和传统-LOAM-思路有什么不同？"><a href="#10-FAST-LIO2-和传统-LOAM-思路有什么不同？" class="headerlink" title="10. FAST-LIO2 和传统 LOAM 思路有什么不同？"></a>10. FAST-LIO2 和传统 LOAM 思路有什么不同？</h2><p>为了更好理解 FAST-LIO2，可以和传统 LOAM 风格的方法做个对比。</p>
+<p>传统 LOAM 类方法通常强调特征提取，比如角点、面点，然后做 scan-to-scan、scan-to-map，再配合前端里程计和后端建图优化。</p>
+<p>FAST-LIO2 的一个重要特点是：它不再依赖传统手工特征提取，而是采用直接 scan-to-map 的方式，将原始点云或有效点直接用于地图匹配更新。</p>
+<p>简单理解就是：LOAM 风格更像是“先提特征，再用特征匹配”；FAST-LIO2 更强调“直接利用点云和地图的几何关系，在统一滤波框架中更新状态”。</p>
+<p>这不代表传统 LOAM 不好，而是两类方法的设计取舍不同。FAST-LIO2 的重点在于 LiDAR 和 IMU 紧耦合、迭代卡尔曼更新、增量地图结构 <code>ikd-Tree</code>，以及直接点云地图匹配。</p>
+<h2 id="11-ikd-Tree-在这里到底帮了什么忙？"><a href="#11-ikd-Tree-在这里到底帮了什么忙？" class="headerlink" title="11. ikd-Tree 在这里到底帮了什么忙？"></a>11. ikd-Tree 在这里到底帮了什么忙？</h2><p>在 scan-to-map 中，几乎每个有效点都需要在地图里找邻近点。</p>
+<p>如果地图里有几十万、几百万个点，每次都从头遍历一遍，实时系统基本撑不住。</p>
+<p>所以需要高效的空间索引结构。</p>
+<p>普通 k-d tree 可以做最近邻搜索，但传统 k-d tree 对频繁增量插入和动态维护不一定友好。<br>FAST-LIO2 使用 ikd-Tree，重点就是为了支持动态点云地图的实时更新。</p>
+<p>它主要解决几个问题：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">1. 快速最近邻搜索；</span><br><span class="line">2. 当前帧点云可以增量插入地图；</span><br><span class="line">3. 局部地图可以动态维护；</span><br><span class="line">4. 不需要每一帧都从零重建整棵树；</span><br><span class="line">5. 支持实时 scan-to-map 匹配。</span><br></pre></td></tr></table></figure>
+
+<p>你可以把 ikd-Tree 理解成一个“会不断更新的地图索引”。</p>
+<p>LiDAR 每来一帧点云，系统都会不断问地图：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">这个点附近有哪些点？</span><br><span class="line">这些点能不能拟合一个平面？</span><br><span class="line">这个点离这个平面有多远？</span><br></pre></td></tr></table></figure>
+
+<p>如果没有高效索引，这些问题问得太慢，整个系统就很难实时。</p>
+<p>所以 ikd-Tree 不是一个边缘细节，而是 FAST-LIO2 能够高效直接 scan-to-map 的关键支撑之一。</p>
+<hr>
+<h2 id="12-FAST-LIO2-为什么是紧耦合？"><a href="#12-FAST-LIO2-为什么是紧耦合？" class="headerlink" title="12. FAST-LIO2 为什么是紧耦合？"></a>12. FAST-LIO2 为什么是紧耦合？</h2><p>理解 FAST-LIO2 时，还经常会看到一个词：</p>
+<blockquote>
+<p>紧耦合。</p>
+</blockquote>
+<p>紧耦合和松耦合的区别，可以这样简单理解。</p>
+<p>松耦合更像是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">IMU 自己估计一个结果</span><br><span class="line">LiDAR 自己估计一个结果</span><br><span class="line">最后再把两个结果融合</span><br></pre></td></tr></table></figure>
+
+<p>也就是说，它融合的是“结果”。</p>
+<p>而紧耦合更像是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">IMU 的测量参与状态预测</span><br><span class="line">LiDAR 的几何残差直接参与状态更新</span><br><span class="line">所有状态在同一个滤波框架里一起估计</span><br></pre></td></tr></table></figure>
+
+<p>也就是说，它融合的是“约束”。</p>
+<figure class="fast-lio2-ieskf-figure fast-lio2-ieskf-figure-wide">
+  <img src="/images/fast-lio2-ieskf/loose-vs-tight-coupling.png" alt="" aria-label="图 7 松耦合与紧耦合的直观区别">
+</figure>
+
+<p>图 7 的重点是信息融合的位置：松耦合更偏向融合最终结果，紧耦合则让原始约束或中间残差直接进入统一估计。</p>
+<p>在 FAST-LIO2 中，LiDAR 不是先单独算出一个完整位姿，再把这个位姿交给滤波器。<br>它是把点到平面残差直接放进滤波更新里。</p>
+<p>这些残差会直接约束：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">姿态</span><br><span class="line">位置</span><br><span class="line">速度</span><br><span class="line">IMU bias</span><br><span class="line">外参</span><br></pre></td></tr></table></figure>
+
+<p>这就是紧耦合的意义。</p>
+<p>紧耦合的好处是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">可以更充分利用原始几何信息</span><br><span class="line">状态之间可以一起被约束和修正</span><br><span class="line">IMU 和 LiDAR 的信息融合更直接</span><br></pre></td></tr></table></figure>
+
+<p>当然，紧耦合也意味着系统更复杂。<br>因为残差、雅可比、状态传播、时间同步、外参、地图结构都要配合好。</p>
+<p>这也是为什么 FAST-LIO2 看起来比普通 scan matching 更复杂。<br>它不是简单地把两个传感器结果拼在一起，而是在同一个状态估计框架里让它们共同工作。</p>
+<hr>
+<h2 id="13-用一句完整的话总结-FAST-LIO2-的前端更新"><a href="#13-用一句完整的话总结-FAST-LIO2-的前端更新" class="headerlink" title="13. 用一句完整的话总结 FAST-LIO2 的前端更新"></a>13. 用一句完整的话总结 FAST-LIO2 的前端更新</h2><p>现在可以把 FAST-LIO2 的前端状态估计过程完整串起来：</p>
+<blockquote>
+<p>FAST-LIO2 首先利用 IMU 数据对姿态、位置、速度和 bias 等状态进行高频传播，同时利用 IMU 估计扫描周期内的连续运动，对当前 LiDAR 点云进行去畸变；随后，将去畸变后的点云根据预测位姿变换到地图坐标系，在 ikd-Tree 维护的局部地图中查找邻近点并拟合局部平面，构建点到平面残差；由于残差关于位姿和地图对应关系都是非线性的，系统会在误差状态空间中进行迭代卡尔曼更新，不断重新计算残差、雅可比和状态增量，直到收敛或达到最大迭代次数；最后，使用更新后的位姿将当前帧点云插入局部地图，为下一帧 scan-to-map 匹配提供地图基础。</p>
+</blockquote>
+<p>这句话比较长，但它基本把 FAST-LIO2 的核心流程说完整了。</p>
+<p>可以拆成几段理解：</p>
+<ul>
+<li><strong>IMU</strong>：负责传播状态，并辅助点云去畸变。</li>
+<li><strong>LiDAR</strong>：负责提供点到平面的几何残差。</li>
+<li><strong>IESKF</strong>：负责在误差状态空间中迭代修正状态。</li>
+<li><strong>ikd-Tree</strong>：负责维护可实时查询和更新的局部点云地图。</li>
+<li><strong>地图更新</strong>：负责把修正后的当前帧点云加入地图。</li>
+</ul>
+<p>这几个模块合起来，就是 FAST-LIO2 前端状态估计的核心。</p>
+<h2 id="14-从前几篇到-FAST-LIO2-的完整主线"><a href="#14-从前几篇到-FAST-LIO2-的完整主线" class="headerlink" title="14. 从前几篇到 FAST-LIO2 的完整主线"></a>14. 从前几篇到 FAST-LIO2 的完整主线</h2><p>到这里，这个系列的主线就能串起来了。</p>
+<p>机器人的状态估计可以理解成预测与修正；KF 解决线性系统里的预测和修正；EKF 通过局部线性化处理非线性系统；ESKF 用误差状态更自然地处理姿态和 IMU；IEKF 在同一帧观测里反复线性化和更新；FAST-LIO2 则把这些思想落到 LiDAR-IMU SLAM 中，形成 IMU 传播、点云去畸变、LiDAR 几何残差、迭代误差状态更新、地图增量维护的组合。</p>
+<p>把这一系列笔记串起来，主线其实很清楚：</p>
+<figure class="fast-lio2-ieskf-figure fast-lio2-ieskf-figure-wide">
+  <img src="/images/fast-lio2-ieskf/kf-to-fast-lio2-mainline.png" alt="" aria-label="图 8 从 KF 到 FAST-LIO2 的主线">
+</figure>
+
+<p>到 FAST-LIO2 这里，前面讲过的预测、修正、误差状态和迭代线性化都落到一个真实系统里。底层逻辑仍然是“预测 + 修正 + 不确定性权衡”，只是机器人问题更复杂以后，状态表达、观测残差和更新方式都跟着变复杂了。</p>
+<h2 id="15-小结"><a href="#15-小结" class="headerlink" title="15. 小结"></a>15. 小结</h2><p>这一篇把前面几篇学过的 KF、EKF、ESKF、IEKF 落到了 FAST-LIO2 中。</p>
+<p>核心内容可以总结成几条：FAST-LIO2 是 LiDAR-IMU 紧耦合里程计与建图系统；IMU 负责高频状态传播，并辅助点云去畸变；LiDAR 当前帧点云会和 <code>ikd-Tree</code> 维护的局部地图做 scan-to-map 匹配；点到平面残差描述当前点云和地图之间的几何误差；由于位姿、邻近点、局部平面和残差都会随更新变化，LiDAR 更新天然带有非线性；因此 FAST-LIO2 使用迭代更新思想，在误差状态空间里反复修正状态；状态更新完成后，当前帧点云再被插入地图，为下一帧匹配提供参考。</p>
+<p>用一句话收束：</p>
+<blockquote>
+<p>FAST-LIO2 的状态估计核心可以理解成：IMU 先传播和预测，LiDAR 用地图几何残差纠偏，而 IESKF 负责在误差状态空间里反复修正这个预测。</p>
+</blockquote>
+<p>后面如果继续沿着这条线展开，最值得单独拆开的就是点到平面残差和雅可比：LiDAR 到底是怎么把“你偏了”这件事，变成滤波器可以使用的数学约束的。</p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://luomengwei.github.io/2026/06/13/fast-lio2-ieskf-imu-lidar-iterated-update/" data-id="cuidKBXZj-iraI1Nq2LbI2h0C" data-title="FAST-LIO2 中的 IESKF：IMU 先预测，LiDAR 再反复纠正" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/FAST-LIO2/" rel="tag">FAST-LIO2</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/IESKF/" rel="tag">IESKF</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/LiDAR-IMU/" rel="tag">LiDAR-IMU</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/SLAM/" rel="tag">SLAM</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E6%BF%80%E5%85%89%E6%83%AF%E6%80%A7%E9%87%8C%E7%A8%8B%E8%AE%A1/" rel="tag">激光惯性里程计</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/" rel="tag">状态估计</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2026/07/29/kf-to-fast-lio2-state-estimation-series-summary/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">前一篇</strong>
+      <div class="article-nav-title">
+        
+          从 KF 到 FAST-LIO2：机器人状态估计系列总结
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2026/06/06/iekf-iterated-extended-kalman-filter/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">后一篇</strong>
+      <div class="article-nav-title">IEKF 迭代扩展卡尔曼滤波：一次修不准，那就多修几次</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分类</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM/">SLAM</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/">状态估计</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/">非线性优化</a></li></ul></li><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/">SLAM学习笔记</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%95%B0%E5%AD%A6%E5%9F%BA%E7%A1%80/">数学基础</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%95%B0%E5%AD%A6%E5%9F%BA%E7%A1%80/%E4%BC%98%E5%8C%96%E6%96%B9%E6%B3%95/">优化方法</a></li></ul></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/CKF/" rel="tag">CKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/EKF/" rel="tag">EKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESKF/" rel="tag">ESKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/FAST-LIO2/" rel="tag">FAST-LIO2</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Hessian/" rel="tag">Hessian</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IEKF/" rel="tag">IEKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IESKF/" rel="tag">IESKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Jacobian/" rel="tag">Jacobian</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/KF/" rel="tag">KF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LiDAR-IMU/" rel="tag">LiDAR-IMU</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SLAM/" rel="tag">SLAM</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/UKF/" rel="tag">UKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%BB%A3%E4%BB%B7%E5%87%BD%E6%95%B0/" rel="tag">代价函数</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%BC%98%E5%8C%96/" rel="tag">优化</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" rel="tag">传感器融合</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%8D%8F%E6%96%B9%E5%B7%AE/" rel="tag">协方差</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%A4%9A%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" rel="tag">多传感器融合</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">扩展卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%80%E5%A4%A7%E4%BC%BC%E7%84%B6%E4%BC%B0%E8%AE%A1/" rel="tag">最大似然估计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%80%E5%A4%A7%E5%90%8E%E9%AA%8C%E4%BC%B0%E8%AE%A1/" rel="tag">最大后验估计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%80%E5%B0%8F%E4%BA%8C%E4%B9%98/" rel="tag">最小二乘</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA/" rel="tag">机器人</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA%E5%AE%9A%E4%BD%8D/" rel="tag">机器人定位</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%A2%AF%E5%BA%A6/" rel="tag">梯度</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%A2%AF%E5%BA%A6%E4%B8%8B%E9%99%8D/" rel="tag">梯度下降</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%AE%8B%E5%B7%AE/" rel="tag">残差</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%B3%B0%E5%8B%92%E5%B1%95%E5%BC%80/" rel="tag">泰勒展开</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%BF%80%E5%85%89%E6%83%AF%E6%80%A7%E9%87%8C%E7%A8%8B%E8%AE%A1/" rel="tag">激光惯性里程计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%89%9B%E9%A1%BF%E6%B3%95/" rel="tag">牛顿法</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/" rel="tag">状态估计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%B2%92%E5%AD%90%E6%BB%A4%E6%B3%A2/" rel="tag">粒子滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%BA%BF%E6%80%A7%E5%8C%96/" rel="tag">线性化</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E8%AF%AF%E5%B7%AE%E7%8A%B6%E6%80%81%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">误差状态卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E8%BF%AD%E4%BB%A3%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">迭代扩展卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%9B%85%E5%8F%AF%E6%AF%94/" rel="tag">雅可比</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/" rel="tag">非线性优化</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%AB%98%E6%96%AF%E5%88%86%E5%B8%83/" rel="tag">高斯分布</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签云</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/CKF/" style="font-size: 10px;">CKF</a> <a href="/tags/EKF/" style="font-size: 10px;">EKF</a> <a href="/tags/ESKF/" style="font-size: 11.67px;">ESKF</a> <a href="/tags/FAST-LIO2/" style="font-size: 15px;">FAST-LIO2</a> <a href="/tags/Hessian/" style="font-size: 11.67px;">Hessian</a> <a href="/tags/IEKF/" style="font-size: 11.67px;">IEKF</a> <a href="/tags/IESKF/" style="font-size: 13.33px;">IESKF</a> <a href="/tags/Jacobian/" style="font-size: 10px;">Jacobian</a> <a href="/tags/KF/" style="font-size: 10px;">KF</a> <a href="/tags/LiDAR-IMU/" style="font-size: 11.67px;">LiDAR-IMU</a> <a href="/tags/SLAM/" style="font-size: 20px;">SLAM</a> <a href="/tags/UKF/" style="font-size: 10px;">UKF</a> <a href="/tags/%E4%BB%A3%E4%BB%B7%E5%87%BD%E6%95%B0/" style="font-size: 10px;">代价函数</a> <a href="/tags/%E4%BC%98%E5%8C%96/" style="font-size: 11.67px;">优化</a> <a href="/tags/%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" style="font-size: 10px;">传感器融合</a> <a href="/tags/%E5%8D%8F%E6%96%B9%E5%B7%AE/" style="font-size: 10px;">协方差</a> <a href="/tags/%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 16.67px;">卡尔曼滤波</a> <a href="/tags/%E5%A4%9A%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" style="font-size: 10px;">多传感器融合</a> <a href="/tags/%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">扩展卡尔曼滤波</a> <a href="/tags/%E6%9C%80%E5%A4%A7%E4%BC%BC%E7%84%B6%E4%BC%B0%E8%AE%A1/" style="font-size: 10px;">最大似然估计</a> <a href="/tags/%E6%9C%80%E5%A4%A7%E5%90%8E%E9%AA%8C%E4%BC%B0%E8%AE%A1/" style="font-size: 10px;">最大后验估计</a> <a href="/tags/%E6%9C%80%E5%B0%8F%E4%BA%8C%E4%B9%98/" style="font-size: 13.33px;">最小二乘</a> <a href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA/" style="font-size: 10px;">机器人</a> <a href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA%E5%AE%9A%E4%BD%8D/" style="font-size: 13.33px;">机器人定位</a> <a href="/tags/%E6%A2%AF%E5%BA%A6/" style="font-size: 11.67px;">梯度</a> <a href="/tags/%E6%A2%AF%E5%BA%A6%E4%B8%8B%E9%99%8D/" style="font-size: 10px;">梯度下降</a> <a href="/tags/%E6%AE%8B%E5%B7%AE/" style="font-size: 10px;">残差</a> <a href="/tags/%E6%B3%B0%E5%8B%92%E5%B1%95%E5%BC%80/" style="font-size: 13.33px;">泰勒展开</a> <a href="/tags/%E6%BF%80%E5%85%89%E6%83%AF%E6%80%A7%E9%87%8C%E7%A8%8B%E8%AE%A1/" style="font-size: 10px;">激光惯性里程计</a> <a href="/tags/%E7%89%9B%E9%A1%BF%E6%B3%95/" style="font-size: 11.67px;">牛顿法</a> <a href="/tags/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/" style="font-size: 18.33px;">状态估计</a> <a href="/tags/%E7%B2%92%E5%AD%90%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">粒子滤波</a> <a href="/tags/%E7%BA%BF%E6%80%A7%E5%8C%96/" style="font-size: 10px;">线性化</a> <a href="/tags/%E8%AF%AF%E5%B7%AE%E7%8A%B6%E6%80%81%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">误差状态卡尔曼滤波</a> <a href="/tags/%E8%BF%AD%E4%BB%A3%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">迭代扩展卡尔曼滤波</a> <a href="/tags/%E9%9B%85%E5%8F%AF%E6%AF%94/" style="font-size: 10px;">雅可比</a> <a href="/tags/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/" style="font-size: 15px;">非线性优化</a> <a href="/tags/%E9%AB%98%E6%96%AF%E5%88%86%E5%B8%83/" style="font-size: 10px;">高斯分布</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">归档</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/08/">八月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/07/">七月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/06/">六月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/05/">五月 2026</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/08/05/taylor-linearization-jacobian-slam-iteration/">泰勒展开、线性化与雅可比：非线性问题为什么要反复求解？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/08/03/least-squares-mle-map-robot-state-estimation/">最小二乘、最大似然与最大后验：为什么残差平方能够估计机器人状态？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/08/01/slam-state-observation-prediction-residual-cost-function/">状态、观测、预测、残差与代价函数：SLAM 优化问题是怎么构造出来的？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/07/29/why-robots-need-nonlinear-optimization/">机器人为什么离不开非线性优化？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/07/28/ukf-ckf-particle-filter-overview/">除了 EKF，还有哪些滤波方法？UKF、CKF、粒子滤波简单聊聊</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 Tomato<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+<script>window.MathJax = {  tex: {    inlineMath: [['\\(', '\\)']],    displayMath: [['\\[', '\\]']],    processEscapes: true  },  options: {    skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']  },  chtml: {    scale: 1.08  }};</script><script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script></body>
+</html>

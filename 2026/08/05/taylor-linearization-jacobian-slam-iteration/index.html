@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>泰勒展开、线性化与雅可比：非线性问题为什么要反复求解？ | Tomato&#39;s Blog</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="从切线与一阶泰勒展开出发，理解 Jacobian 如何描述状态增量与残差变化，并串起 LiDAR 点面残差、相机重投影和 SLAM 的反复线性化过程。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="泰勒展开、线性化与雅可比：非线性问题为什么要反复求解？">
+<meta property="og:url" content="https://luomengwei.github.io/2026/08/05/taylor-linearization-jacobian-slam-iteration/index.html">
+<meta property="og:site_name" content="Tomato&#39;s Blog">
+<meta property="og:description" content="从切线与一阶泰勒展开出发，理解 Jacobian 如何描述状态增量与残差变化，并串起 LiDAR 点面残差、相机重投影和 SLAM 的反复线性化过程。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://luomengwei.github.io/images/nonlinear-optimization/19-linear-vs-nonlinear.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/nonlinear-optimization/20-taylor-linearization.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/nonlinear-optimization/21-jacobian-meaning.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/nonlinear-optimization/22-relinearization-iteration.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/nonlinear-optimization/23-point-plane-jacobian.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/nonlinear-optimization/24-taylor-jacobian-summary.png">
+<meta property="article:published_time" content="2026-08-05T12:30:00.000Z">
+<meta property="article:modified_time" content="2026-08-10T15:25:33.503Z">
+<meta property="article:author" content="Tomato">
+<meta property="article:tag" content="Jacobian">
+<meta property="article:tag" content="SLAM">
+<meta property="article:tag" content="泰勒展开">
+<meta property="article:tag" content="状态估计">
+<meta property="article:tag" content="线性化">
+<meta property="article:tag" content="雅可比">
+<meta property="article:tag" content="非线性优化">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://luomengwei.github.io/images/nonlinear-optimization/19-linear-vs-nonlinear.png">
+  
+    <link rel="alternate" href="/atom.xml" title="Tomato's Blog" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
+
+<!-- hexo injector head_end start --><link rel="stylesheet" href="/css/custom.css"><!-- hexo injector head_end end --><meta name="generator" content="Hexo 8.1.2"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Tomato&#39;s Blog</a>
+      </h1>
+      
+        <h2 id="subtitle-wrap">
+          <a href="/" id="subtitle">Robotics, SLAM and LiDAR-IMU Notes</a>
+        </h2>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS 订阅"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="搜索"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜索"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://luomengwei.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-taylor-linearization-jacobian-slam-iteration" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/08/05/taylor-linearization-jacobian-slam-iteration/" class="article-date">
+  <time class="dt-published" datetime="2026-08-05T12:30:00.000Z" itemprop="datePublished">2026-08-05</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/SLAM/">SLAM</a>►<a class="article-category-link" href="/categories/SLAM/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/">非线性优化</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      泰勒展开、线性化与雅可比：非线性问题为什么要反复求解？
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p><a href="/2026/08/03/least-squares-mle-map-robot-state-estimation/">上一篇文章</a>从概率角度解释了加权最小二乘、最大似然和最大后验之间的关系。</p>
+<p>这一篇继续解决下一个问题：目标函数已经写出来了，面对包含旋转、投影和坐标变换的非线性残差，优化器怎样一步步求出状态？</p>
+<span id="more"></span>
+
+<style>
+.linearization-jacobian-figure {
+  margin: 1.5em auto 1.8em;
+  text-align: center;
+}
+.linearization-jacobian-figure img {
+  display: block;
+  width: 84%;
+  max-width: 940px;
+  height: auto;
+  margin: 0 auto;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.linearization-jacobian-figure-wide img {
+  width: 92%;
+  max-width: 1060px;
+}
+.linearization-jacobian-figure figcaption {
+  display: none;
+}
+@media (max-width: 720px) {
+  .linearization-jacobian-figure img,
+  .linearization-jacobian-figure-wide img {
+    width: 100%;
+  }
+}
+</style>
+
+<p>前三篇已经完成了非线性优化问题的建模。一个典型 SLAM 目标可以写成：</p>
+<div class="math-display">\[\mathbf{x}^{\star}
+=
+\operatorname*{arg\,min}_{\mathbf{x}}
+\frac{1}{2}
+\sum_i
+\mathbf{r}_i^T(\mathbf{x})
+\mathbf{W}_i
+\mathbf{r}_i(\mathbf{x})\]</div>
+<p>其中 <span class="math-inline">\(\mathbf{x}\)</span> 是状态，<span class="math-inline">\(\mathbf r_i\)</span> 是残差，<span class="math-inline">\(\mathbf W_i\)</span> 是信息矩阵。但 SLAM 残差中常包含三维旋转、相机透视除法、坐标变换与非线性传感器模型，通常无法一次直接求出最优状态。</p>
+<p>现代 SLAM 的关键思想是：原问题虽然非线性，但可以在当前状态附近建立一个临时的局部线性模型，求出小增量，再到新状态重新线性化：</p>
+<div class="math-display">\[\boxed{
+\text{线性化}
+\rightarrow
+\text{求增量}
+\rightarrow
+\text{更新状态}
+\rightarrow
+\text{重新线性化}
+}\]</div>
+<p>背后的核心工具就是泰勒展开、偏导数与雅可比矩阵。</p>
+<h2 id="1-为什么非线性问题不能像线性方程一样一次求完？"><a href="#1-为什么非线性问题不能像线性方程一样一次求完？" class="headerlink" title="1. 为什么非线性问题不能像线性方程一样一次求完？"></a>1. 为什么非线性问题不能像线性方程一样一次求完？</h2><p>线性方程 <span class="math-inline">\(2x+1=7\)</span> 可以通过移项直接得到 <span class="math-inline">\(x=3\)</span>。更一般的线性系统 <span class="math-inline">\(\mathbf A\mathbf x=\mathbf b\)</span> 也有成熟的一次性线性代数求解方法。</p>
+<p>非线性方程 <span class="math-inline">\(x^2=7\)</span> 虽然仍有解析解，但真实 SLAM 模型远比这个例子复杂。例如针孔投影：</p>
+<div class="math-display">\[u=f_x\frac{X_c}{Z_c}+c_x,
+\qquad
+\begin{bmatrix}X_c\\Y_c\\Z_c\end{bmatrix}
+=
+\mathbf R\mathbf P+\mathbf t\]</div>
+<p>像素坐标同时依赖旋转、平移、地图点和深度；旋转本身又受 <span class="math-inline">\(SO(3)\)</span> 约束。这样的方程组通常没有可直接使用的闭式解。</p>
+<p>因此不必一次理解整个函数，只要先描述“当前点附近”它如何变化，就能朝更好的状态走一小步。</p>
+<figure class="linearization-jacobian-figure linearization-jacobian-figure-wide">
+  <img src="/images/nonlinear-optimization/19-linear-vs-nonlinear.png" alt="" aria-label="图 1 线性函数的局部结构与全局一致，非线性函数在不同位置需要不同切线近似">
+</figure>
+
+<h2 id="2-线性化到底是什么意思？"><a href="#2-线性化到底是什么意思？" class="headerlink" title="2. 线性化到底是什么意思？"></a>2. 线性化到底是什么意思？</h2><p>设非线性函数为 <span class="math-inline">\(y=f(x)\)</span>，当前点为 <span class="math-inline">\(x_0\)</span>。当状态发生一个小变化 <span class="math-inline">\(\Delta x\)</span> 时，希望估计 <span class="math-inline">\(f(x_0+\Delta x)\)</span>。</p>
+<p>如果 <span class="math-inline">\(\Delta x\)</span> 足够小，可以用当前点切线近似：</p>
+<div class="math-display">\[f(x_0+\Delta x)
+\approx
+f(x_0)+f'(x_0)\Delta x\]</div>
+<p>这里的三部分分别是当前函数值、当前斜率和状态增量。直观上，就是知道脚下高度和坡度后，用它估计走一小步后的高度。</p>
+<h2 id="3-从“切线”理解线性化"><a href="#3-从“切线”理解线性化" class="headerlink" title="3. 从“切线”理解线性化"></a>3. 从“切线”理解线性化</h2><p>令 <span class="math-inline">\(f(x)=x^2\)</span>，在 <span class="math-inline">\(x_0=2\)</span> 处：</p>
+<div class="math-display">\[f(2)=4,
+\qquad
+f'(2)=4\]</div>
+<p>一阶近似为：</p>
+<div class="math-display">\[f(2+\Delta x)\approx4+4\Delta x\]</div>
+<p>当 <span class="math-inline">\(\Delta x=0.1\)</span> 时，近似值为 4.4，真实值为 <span class="math-inline">\(2.1^2=4.41\)</span>，误差仅 0.01；当 <span class="math-inline">\(\Delta x=2\)</span> 时，近似值为 12，真实值为 16，误差已经很大。</p>
+<p>所以线性化是局部工具，它要求增量处于当前近似仍可信的范围内。</p>
+<figure class="linearization-jacobian-figure linearization-jacobian-figure-wide">
+  <img src="/images/nonlinear-optimization/20-taylor-linearization.png" alt="" aria-label="图 2 在当前点附近切线能很好近似非线性函数，远离线性化点后近似误差增大">
+</figure>
+
+<h2 id="4-泰勒展开从哪里来？"><a href="#4-泰勒展开从哪里来？" class="headerlink" title="4. 泰勒展开从哪里来？"></a>4. 泰勒展开从哪里来？</h2><p>若 <span class="math-inline">\(f(x)\)</span> 在 <span class="math-inline">\(x_0\)</span> 附近足够光滑，泰勒展开为：</p>
+<div class="math-display">\[f(x_0+\Delta x)
+=
+f(x_0)
++f'(x_0)\Delta x
++\frac12f''(x_0)\Delta x^2
++\frac{1}{6}f'''(x_0)\Delta x^3
++\cdots\]</div>
+<p>当 <span class="math-inline">\(\Delta x\)</span> 足够小时，高阶幂会更快变小。忽略二阶及以上余项，便得到一阶泰勒近似。它不是说原函数变成了直线，而是说在当前点附近，直线能提供一个有用的局部模型。</p>
+<h2 id="5-为什么-SLAM-大量使用一阶线性化？"><a href="#5-为什么-SLAM-大量使用一阶线性化？" class="headerlink" title="5. 为什么 SLAM 大量使用一阶线性化？"></a>5. 为什么 SLAM 大量使用一阶线性化？</h2><p>SLAM 的状态维度高、残差数量多，而且常有实时性要求。完整高阶导数推导、计算和存储成本都很高。</p>
+<p>一阶残差线性化已经能告诉优化器“状态变化一点，残差大约怎么变”，足以构造 Gauss–Newton 和 Levenberg–Marquardt 等高效算法。因此工程中常用：</p>
+<div class="math-display">\[\boxed{
+\text{一阶局部模型}
++
+\text{反复重新线性化}
+}\]</div>
+<p>这不等于完全忽略二阶信息：Gauss–Newton 会利用一阶 Jacobian 构造目标函数 Hessian 的近似，后文会专门讨论。</p>
+<h2 id="6-一个变量容易，多个变量怎么办？"><a href="#6-一个变量容易，多个变量怎么办？" class="headerlink" title="6. 一个变量容易，多个变量怎么办？"></a>6. 一个变量容易，多个变量怎么办？</h2><p>SLAM 状态通常是向量 <span class="math-inline">\(\mathbf x\in\mathbb R^n\)</span>。若输出是标量函数 <span class="math-inline">\(f(\mathbf x)\)</span>，采用列向量梯度约定：</p>
+<div class="math-display">\[\nabla f
+=
+\begin{bmatrix}
+\frac{\partial f}{\partial x_1}\\
+\vdots\\
+\frac{\partial f}{\partial x_n}
+\end{bmatrix}\]</div>
+<p>多变量一阶近似为：</p>
+<div class="math-display">\[f(\mathbf x+\Delta\mathbf x)
+\approx
+f(\mathbf x)
++
+\nabla f(\mathbf x)^T\Delta\mathbf x\]</div>
+<p>例如 <span class="math-inline">\(f(x,y)=x^2+3xy+y^2\)</span>，<span class="math-inline">\(x\)</span> 与 <span class="math-inline">\(y\)</span> 的小变化会分别通过偏导数影响函数值。</p>
+<h2 id="7-梯度和雅可比有什么区别？"><a href="#7-梯度和雅可比有什么区别？" class="headerlink" title="7. 梯度和雅可比有什么区别？"></a>7. 梯度和雅可比有什么区别？</h2><p>当 <span class="math-inline">\(f:\mathbb R^n\to\mathbb R\)</span> 输出一个标量时，通常使用梯度 <span class="math-inline">\(\nabla f\)</span>。</p>
+<p>当 <span class="math-inline">\(\mathbf f:\mathbb R^n\to\mathbb R^m\)</span> 输出向量时，使用雅可比矩阵：</p>
+<div class="math-display">\[\mathbf J
+=
+\frac{\partial\mathbf f}{\partial\mathbf x}\]</div>
+<p>不同教材可能把标量函数导数写成行向量或列向量。本文约定梯度为列向量，向量函数的 Jacobian 每一行对应一个输出分量。</p>
+<h2 id="8-雅可比矩阵到底长什么样？"><a href="#8-雅可比矩阵到底长什么样？" class="headerlink" title="8. 雅可比矩阵到底长什么样？"></a>8. 雅可比矩阵到底长什么样？</h2><p>设状态 <span class="math-inline">\(\mathbf x=[x_1\;x_2\;x_3]^T\)</span>，输出有两个分量 <span class="math-inline">\(\mathbf f=[f_1\;f_2]^T\)</span>，则：</p>
+<div class="math-display">\[\mathbf J
+=
+\begin{bmatrix}
+\frac{\partial f_1}{\partial x_1} &amp;
+\frac{\partial f_1}{\partial x_2} &amp;
+\frac{\partial f_1}{\partial x_3}\\
+\frac{\partial f_2}{\partial x_1} &amp;
+\frac{\partial f_2}{\partial x_2} &amp;
+\frac{\partial f_2}{\partial x_3}
+\end{bmatrix}
+\in\mathbb R^{2\times3}\]</div>
+<p>一般地，若残差 <span class="math-inline">\(\mathbf r\in\mathbb R^m\)</span>、状态局部坐标 <span class="math-inline">\(\mathbf x\in\mathbb R^n\)</span>，那么 <span class="math-inline">\(\mathbf J=\partial\mathbf r/\partial\mathbf x\in\mathbb R^{m\times n}\)</span>。</p>
+<h2 id="9-雅可比每一行和每一列分别是什么意思？"><a href="#9-雅可比每一行和每一列分别是什么意思？" class="headerlink" title="9. 雅可比每一行和每一列分别是什么意思？"></a>9. 雅可比每一行和每一列分别是什么意思？</h2><ul>
+<li><strong>一整行：</strong> 某个残差对所有状态方向的局部敏感性。</li>
+<li><strong>一整列：</strong> 某个状态方向变化时，对所有残差的局部影响。</li>
+<li><strong>一个元素：</strong> <span class="math-inline">\(J_{ij}=\partial r_i/\partial x_j\)</span>，表示第 <span class="math-inline">\(j\)</span> 个状态方向变化一点，第 <span class="math-inline">\(i\)</span> 个残差大约变化多少。</li>
+</ul>
+<p>因此 Jacobian 记录的是：</p>
+<div class="math-display">\[\boxed{
+\text{状态小增量}
+\longmapsto
+\text{残差一阶变化}
+}\]</div>
+<figure class="linearization-jacobian-figure linearization-jacobian-figure-wide">
+  <img src="/images/nonlinear-optimization/21-jacobian-meaning.png" alt="" aria-label="图 3 Jacobian 的每行对应一个残差，每列对应一个状态方向，每个元素描述局部敏感性">
+</figure>
+
+<h2 id="10-残差怎么进行线性化？"><a href="#10-残差怎么进行线性化？" class="headerlink" title="10. 残差怎么进行线性化？"></a>10. 残差怎么进行线性化？</h2><p>设当前状态为 <span class="math-inline">\(\mathbf x_k\)</span>，希望寻找局部增量 <span class="math-inline">\(\Delta\mathbf x\)</span>。对残差做一阶展开：</p>
+<div class="math-display">\[\mathbf r(\mathbf x_k\boxplus\Delta\mathbf x)
+\approx
+\mathbf r(\mathbf x_k)
++
+\mathbf J_k\Delta\mathbf x\]</div>
+<p>其中：</p>
+<div class="math-display">\[\mathbf J_k
+=
+\left.
+\frac{\partial\mathbf r(\mathbf x\boxplus\Delta\mathbf x)}
+{\partial\Delta\mathbf x}
+\right|_{\Delta\mathbf x=\mathbf{0}}\]</div>
+<p>对欧氏状态，<span class="math-inline">\(\boxplus\)</span> 就是普通加法；对旋转和位姿，它表示在流形上施加局部扰动。因为线性化点变化后局部斜率通常也会变化，所以一般有 <span class="math-inline">\(\mathbf J_{k+1}\neq\mathbf J_k\)</span>。</p>
+<h2 id="11-一个简单数值例子：残差怎么被线性化？"><a href="#11-一个简单数值例子：残差怎么被线性化？" class="headerlink" title="11. 一个简单数值例子：残差怎么被线性化？"></a>11. 一个简单数值例子：残差怎么被线性化？</h2><p>设残差：</p>
+<div class="math-display">\[r(x)=4-x^2\]</div>
+<p>希望求解 <span class="math-inline">\(r(x)=0\)</span>。从 <span class="math-inline">\(x_k=1.5\)</span> 出发：</p>
+<div class="math-display">\[r(1.5)=1.75,
+\qquad
+J_k=\left.\frac{dr}{dx}\right|_{1.5}=-3\]</div>
+<p>局部模型为：</p>
+<div class="math-display">\[r(x_k+\Delta x)
+\approx
+1.75-3\Delta x\]</div>
+<p>令线性化残差为零，得到 <span class="math-inline">\(\Delta x=1.75/3\approx0.5833\)</span>，于是 <span class="math-inline">\(x_{k+1}\approx2.0833\)</span>。它还不是准确根 2，因为当前线性模型只在 1.5 附近近似真实函数。到达新状态后，需要重新计算残差和导数再走一步。</p>
+<h2 id="12-为什么叫“当前线性化点”？"><a href="#12-为什么叫“当前线性化点”？" class="headerlink" title="12. 为什么叫“当前线性化点”？"></a>12. 为什么叫“当前线性化点”？</h2><p>linearization point、current estimate 和 operating point 都是在说：这一轮选择在哪个状态附近建立局部线性模型。</p>
+<p>第一次在 <span class="math-inline">\(\mathbf x_0\)</span> 处得到 <span class="math-inline">\(\mathbf J_0\)</span>，求出增量并更新到 <span class="math-inline">\(\mathbf x_1\)</span>；第二轮应在 <span class="math-inline">\(\mathbf x_1\)</span> 处重新计算 <span class="math-inline">\(\mathbf r_1\)</span> 与 <span class="math-inline">\(\mathbf J_1\)</span>，而不是继续沿用旧切线。</p>
+<figure class="linearization-jacobian-figure linearization-jacobian-figure-wide">
+  <img src="/images/nonlinear-optimization/22-relinearization-iteration.png" alt="" aria-label="图 4 非线性优化在每个新状态重新建立局部线性模型，逐步逼近目标解">
+</figure>
+
+<h2 id="13-初值为什么这么重要？"><a href="#13-初值为什么这么重要？" class="headerlink" title="13. 初值为什么这么重要？"></a>13. 初值为什么这么重要？</h2><p>若初值已经接近正确答案，当前局部模型通常比较可信，几轮迭代便可能收敛。若初值离目标很远，切线可能无法代表目标区域，求出的方向或步长可能错误，甚至进入另一个局部极小值。</p>
+<p>这就是为什么工程中常用运动模型、IMU 传播、PnP&#x2F;RANSAC、粗配准和图像金字塔为优化提供更好的初值。它们都在努力让迭代从“局部近似还算可信”的区域开始。</p>
+<h2 id="14-雅可比为什么决定“应该怎么改状态”？"><a href="#14-雅可比为什么决定“应该怎么改状态”？" class="headerlink" title="14. 雅可比为什么决定“应该怎么改状态”？"></a>14. 雅可比为什么决定“应该怎么改状态”？</h2><p>只知道残差大小还不够。<span class="math-inline">\(r(x)=x-3\)</span> 在 <span class="math-inline">\(x=4\)</span> 时有 <span class="math-inline">\(r=1,J=1\)</span>，应让 <span class="math-inline">\(x\)</span> 减小；<span class="math-inline">\(r(x)=3-x\)</span> 在 <span class="math-inline">\(x=2\)</span> 时同样有 <span class="math-inline">\(r=1\)</span>，但 <span class="math-inline">\(J=-1\)</span>，这时增大 <span class="math-inline">\(x\)</span> 才能减小残差。</p>
+<p>所以：</p>
+<blockquote>
+<p>残差告诉我们“当前不一致有多大”，Jacobian 告诉我们“状态沿各方向小幅变化时，残差会怎样变化”。</p>
+</blockquote>
+<p>真正的联合更新方向还要结合所有残差、权重与线性求解器共同确定，不能只看单个 Jacobian 元素。</p>
+<h2 id="15-SLAM-例子一：点到平面残差的线性化"><a href="#15-SLAM-例子一：点到平面残差的线性化" class="headerlink" title="15. SLAM 例子一：点到平面残差的线性化"></a>15. SLAM 例子一：点到平面残差的线性化</h2><p>设激光点 <span class="math-inline">\(\mathbf p\)</span> 经当前位姿变换到世界系：</p>
+<div class="math-display">\[\mathbf p_w=\mathbf R\mathbf p+\mathbf t\]</div>
+<p>局部平面由平面点 <span class="math-inline">\(\mathbf q\)</span> 和单位法向量 <span class="math-inline">\(\mathbf n\)</span> 描述。点到平面有符号残差为：</p>
+<div class="math-display">\[r
+=
+\mathbf n^T
+(\mathbf R\mathbf p+\mathbf t-\mathbf q)\]</div>
+<h3 id="15-1-对平移求导"><a href="#15-1-对平移求导" class="headerlink" title="15.1 对平移求导"></a>15.1 对平移求导</h3><p>在这一残差定义下：</p>
+<div class="math-display">\[\frac{\partial r}{\partial\mathbf t}=\mathbf n^T\]</div>
+<p>平移沿法向移动会明显改变点面距离，沿平面切向移动的一阶变化为零。对水平地面 <span class="math-inline">\(\mathbf n=[0\;0\;1]^T\)</span>，单个无限平面能直接约束竖直平移，却无法单独约束平面内平移。</p>
+<h3 id="15-2-对旋转求导为什么更复杂？"><a href="#15-2-对旋转求导为什么更复杂？" class="headerlink" title="15.2 对旋转求导为什么更复杂？"></a>15.2 对旋转求导为什么更复杂？</h3><p>旋转矩阵不能通过 <span class="math-inline">\(\mathbf R+\Delta\mathbf R\)</span> 任意更新。采用某一种右扰动约定：</p>
+<div class="math-display">\[\mathbf R'
+=
+\mathbf R\operatorname{Exp}(\delta\boldsymbol\theta)\]</div>
+<p>有一阶近似：</p>
+<div class="math-display">\[\mathbf R'\mathbf p
+\approx
+\mathbf R\mathbf p
+-
+\mathbf R[\mathbf p]_\times\delta\boldsymbol\theta\]</div>
+<p>因此旋转 Jacobian 会出现叉乘矩阵。若改用左扰动、不同位姿方向或相反残差定义，公式的乘法顺序和符号也会改变，不能脱离约定死记。</p>
+<figure class="linearization-jacobian-figure linearization-jacobian-figure-wide">
+  <img src="/images/nonlinear-optimization/23-point-plane-jacobian.png" alt="" aria-label="图 5 点到平面残差对法向平移敏感、对切向平移一阶不敏感，Jacobian 反映观测约束方向">
+</figure>
+
+<h2 id="16-SLAM-例子二：重投影残差的雅可比"><a href="#16-SLAM-例子二：重投影残差的雅可比" class="headerlink" title="16. SLAM 例子二：重投影残差的雅可比"></a>16. SLAM 例子二：重投影残差的雅可比</h2><p>世界点 <span class="math-inline">\(\mathbf P_w\)</span> 变换到相机坐标系：</p>
+<div class="math-display">\[\mathbf P_c
+=
+\mathbf R_{cw}\mathbf P_w+\mathbf t_{cw}
+=
+\begin{bmatrix}X&amp;Y&amp;Z\end{bmatrix}^T\]</div>
+<p>针孔投影为：</p>
+<div class="math-display">\[\hat u=f_x\frac{X}{Z}+c_x,
+\qquad
+\hat v=f_y\frac{Y}{Z}+c_y\]</div>
+<p>若定义残差 <span class="math-inline">\(\mathbf r=\mathbf z-\hat{\mathbf z}\)</span>，则需要求 <span class="math-inline">\(\partial\mathbf r/\partial\mathbf x\)</span>。如果采用 <span class="math-inline">\(\hat{\mathbf z}-\mathbf z\)</span> 的相反定义，整个残差 Jacobian 会多一个负号，但只要前后一致，两种定义都可以。</p>
+<h2 id="17-链式法则：复杂雅可比往往是“拆出来”的"><a href="#17-链式法则：复杂雅可比往往是“拆出来”的" class="headerlink" title="17. 链式法则：复杂雅可比往往是“拆出来”的"></a>17. 链式法则：复杂雅可比往往是“拆出来”的</h2><p>重投影过程可以拆成：</p>
+<div class="math-display">\[\text{位姿状态}
+\rightarrow
+\mathbf P_c
+\rightarrow
+\hat{\mathbf z}
+\rightarrow
+\mathbf r\]</div>
+<p>因此：</p>
+<div class="math-display">\[\frac{\partial\mathbf r}{\partial\mathbf x}
+=
+\frac{\partial\mathbf r}{\partial\hat{\mathbf z}}
+\frac{\partial\hat{\mathbf z}}{\partial\mathbf P_c}
+\frac{\partial\mathbf P_c}{\partial\mathbf x}\]</div>
+<p>投影对相机坐标点的 Jacobian 为：</p>
+<div class="math-display">\[\frac{\partial\hat{\mathbf z}}{\partial\mathbf P_c}
+=
+\begin{bmatrix}
+\frac{f_x}{Z} &amp; 0 &amp; -\frac{f_xX}{Z^2}\\
+0 &amp; \frac{f_y}{Z} &amp; -\frac{f_yY}{Z^2}
+\end{bmatrix}\]</div>
+<p>再乘上坐标变换对位姿局部增量的 Jacobian，就得到最终重投影 Jacobian。复杂模型的导数通常由多个小模块通过链式法则拼接，而不是从巨大公式一次展开。</p>
+<h2 id="18-为什么深度-MATHI-Wg-很重要？"><a href="#18-为什么深度-MATHI-Wg-很重要？" class="headerlink" title="18. 为什么深度 <span class="math-inline">\(Z\)</span> 很重要？"></a>18. 为什么深度 <span class="math-inline">\(Z\)</span> 很重要？</h2><p>投影 Jacobian 中存在 <span class="math-inline">\(f_x/Z\)</span>、<span class="math-inline">\(f_xX/Z^2\)</span> 等项。近处点对相机运动更敏感，相同三维位移会造成更大像素变化；远处点的像素变化通常更小。</p>
+<p>因此 Jacobian 不只是代数工具，它编码了深度、视角与运动之间的真实几何关系。接近 <span class="math-inline">\(Z=0\)</span> 时投影模型还会变得数值敏感，实际系统必须检查有效深度与视场。</p>
+<h2 id="19-解析求导、数值求导和自动求导"><a href="#19-解析求导、数值求导和自动求导" class="headerlink" title="19. 解析求导、数值求导和自动求导"></a>19. 解析求导、数值求导和自动求导</h2><h3 id="19-1-解析求导"><a href="#19-1-解析求导" class="headerlink" title="19.1 解析求导"></a>19.1 解析求导</h3><p>手工推导并实现 Jacobian。优点是速度快、可利用稀疏结构、便于针对性优化；缺点是复杂模型容易在符号、坐标系和扰动约定上出错。</p>
+<h3 id="19-2-数值求导"><a href="#19-2-数值求导" class="headerlink" title="19.2 数值求导"></a>19.2 数值求导</h3><p>中心差分近似为：</p>
+<div class="math-display">\[\frac{\partial f}{\partial x}
+\approx
+\frac{f(x+\epsilon)-f(x-\epsilon)}{2\epsilon}\]</div>
+<p>它易于实现，特别适合验证解析 Jacobian；但需要重复计算残差，速度较慢，并受截断误差、浮点误差和步长尺度影响。在流形状态上，扰动应通过 <span class="math-inline">\(\boxplus\)</span> 施加，而不是直接修改矩阵元素。</p>
+<h3 id="19-3-自动求导"><a href="#19-3-自动求导" class="headerlink" title="19.3 自动求导"></a>19.3 自动求导</h3><p>自动求导沿计算图精确应用链式法则，不是有限差分。它开发效率高，精度通常接近解析导数，但可能有额外模板、内存或运行开销。Ceres Solver 等通用优化库广泛使用这种方式。</p>
+<h2 id="20-三种求导方式应该怎么选？"><a href="#20-三种求导方式应该怎么选？" class="headerlink" title="20. 三种求导方式应该怎么选？"></a>20. 三种求导方式应该怎么选？</h2><table>
+<thead>
+<tr>
+<th>方法</th>
+<th>优点</th>
+<th>局限</th>
+<th>常见用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>解析求导</td>
+<td>快、结构清楚、可深度优化</td>
+<td>推导与维护成本高</td>
+<td>高性能 SLAM 核心模块</td>
+</tr>
+<tr>
+<td>数值求导</td>
+<td>实现最直接</td>
+<td>慢且受步长影响</td>
+<td>Jacobian 检查、原型验证</td>
+</tr>
+<tr>
+<td>自动求导</td>
+<td>开发方便、导数精度高</td>
+<td>可能有额外开销</td>
+<td>Ceres 等通用优化框架</td>
+</tr>
+</tbody></table>
+<p>工程中很常见的流程是：先实现解析或自动求导，再用有限差分逐项核对 Jacobian。</p>
+<h2 id="21-雅可比写错会发生什么？"><a href="#21-雅可比写错会发生什么？" class="headerlink" title="21. 雅可比写错会发生什么？"></a>21. 雅可比写错会发生什么？</h2><p>若真实导数为 2，代码却写成 -2，优化器就会使用相反的局部变化模型，可能导致残差增大、状态增量异常、LM 阻尼不断上升，最终发散或收敛到错误位置。</p>
+<p>排查非线性优化时，一个实用顺序是：</p>
+<blockquote>
+<p>先验证残差和坐标系，再检查 Jacobian，最后再怀疑线性求解器或优化算法。</p>
+</blockquote>
+<h2 id="22-雅可比中的零意味着什么？"><a href="#22-雅可比中的零意味着什么？" class="headerlink" title="22. 雅可比中的零意味着什么？"></a>22. 雅可比中的零意味着什么？</h2><p>若 <span class="math-inline">\(\partial r_i/\partial x_j=0\)</span>，表示在当前线性化点附近，状态方向 <span class="math-inline">\(x_j\)</span> 的小变化不会引起残差 <span class="math-inline">\(r_i\)</span> 的一阶变化。</p>
+<p>标准 BA 的重投影残差 <span class="math-inline">\(\mathbf r_{ij}\)</span> 只依赖相机 <span class="math-inline">\(\mathbf T_i\)</span> 与地图点 <span class="math-inline">\(\mathbf P_j\)</span>。它对其他相机和其他地图点的 Jacobian 块为零，于是整体 Jacobian 出现大量零块。这正是 SLAM 稀疏结构的来源之一。</p>
+<h2 id="23-雅可比小，是不是说明这个状态“不重要”？"><a href="#23-雅可比小，是不是说明这个状态“不重要”？" class="headerlink" title="23. 雅可比小，是不是说明这个状态“不重要”？"></a>23. 雅可比小，是不是说明这个状态“不重要”？</h2><p>不一定。Jacobian 小只表示<strong>当前这条观测在当前点附近</strong>对某个状态方向不敏感。</p>
+<p>水平地面的点面残差对竖直平移敏感、对平面内平移不敏感，并不意味着平面内位置不重要，而是这类观测无法独立约束它。其他方向的墙面或其他传感器可能补足约束；若所有观测都对某方向不敏感，才会形成弱约束、退化或不可观方向。</p>
+<h2 id="24-从一个残差到很多残差"><a href="#24-从一个残差到很多残差" class="headerlink" title="24. 从一个残差到很多残差"></a>24. 从一个残差到很多残差</h2><p>把所有残差堆叠为 <span class="math-inline">\(\mathbf r\in\mathbb R^m\)</span>，局部状态增量为 <span class="math-inline">\(\Delta\mathbf x\in\mathbb R^n\)</span>，整体 Jacobian 为 <span class="math-inline">\(\mathbf J\in\mathbb R^{m\times n}\)</span>：</p>
+<div class="math-display">\[\mathbf r(\mathbf x_k\boxplus\Delta\mathbf x)
+\approx
+\mathbf r_k+\mathbf J_k\Delta\mathbf x\]</div>
+<p>稀疏 Jacobian 可以按残差逐块计算，再由求解器拼装或直接累加到法方程中，并不一定需要形成一个巨大的稠密矩阵。</p>
+<h2 id="25-把线性化代回最小二乘，会发生什么？"><a href="#25-把线性化代回最小二乘，会发生什么？" class="headerlink" title="25. 把线性化代回最小二乘，会发生什么？"></a>25. 把线性化代回最小二乘，会发生什么？</h2><p>原带权目标为：</p>
+<div class="math-display">\[F(\mathbf x)
+=
+\frac12
+\lVert\mathbf r(\mathbf x)\rVert_{\mathbf W}^2,
+\qquad
+\lVert\mathbf a\rVert_{\mathbf W}^2
+=
+\mathbf a^T\mathbf W\mathbf a\]</div>
+<p>代入局部模型后，本轮需要求解：</p>
+<div class="math-display">\[\min_{\Delta\mathbf x}
+\frac12
+\lVert
+\mathbf r_k+\mathbf J_k\Delta\mathbf x
+\rVert_{\mathbf W}^2\]</div>
+<p>原本关于 <span class="math-inline">\(\mathbf x\)</span> 的非线性问题，被暂时变成了关于增量 <span class="math-inline">\(\Delta\mathbf x\)</span> 的线性最小二乘问题。这正是 Gauss–Newton 推导的入口。</p>
+<p>若使用白化残差 <span class="math-inline">\(\tilde{\mathbf r}=\mathbf L\mathbf r\)</span>、<span class="math-inline">\(\tilde{\mathbf J}=\mathbf L\mathbf J\)</span>，其中 <span class="math-inline">\(\mathbf L^T\mathbf L=\mathbf W\)</span>，也可以把它写成普通欧氏范数。</p>
+<h2 id="26-为什么求的是增量，而不是直接求状态？"><a href="#26-为什么求的是增量，而不是直接求状态？" class="headerlink" title="26. 为什么求的是增量，而不是直接求状态？"></a>26. 为什么求的是增量，而不是直接求状态？</h2><p>第 <span class="math-inline">\(k\)</span> 轮已经有当前估计 <span class="math-inline">\(\mathbf x_k\)</span>，真正需要求的是局部修正 <span class="math-inline">\(\Delta\mathbf x_k\)</span>：</p>
+<div class="math-display">\[\mathbf x_{k+1}
+=
+\mathbf x_k\boxplus\Delta\mathbf x_k\]</div>
+<p>整个优化过程就是 <span class="math-inline">\(\mathbf x_0\to\mathbf x_1\to\cdots\to\mathbf x^\star\)</span>。代码中的 delta pose、increment、perturbation 和 error state，表达的都是“当前状态还需要修多少”。</p>
+<h2 id="27-旋转真的可以直接写成-MATHI-XG1hdGhiZiBSK1xEZWx0YVxtYXRoYmYgUg-吗？"><a href="#27-旋转真的可以直接写成-MATHI-XG1hdGhiZiBSK1xEZWx0YVxtYXRoYmYgUg-吗？" class="headerlink" title="27. 旋转真的可以直接写成 <span class="math-inline">\(\mathbf R+\Delta\mathbf R\)</span> 吗？"></a>27. 旋转真的可以直接写成 <span class="math-inline">\(\mathbf R+\Delta\mathbf R\)</span> 吗？</h2><p>不能。旋转矩阵 <span class="math-inline">\(\mathbf R\in SO(3)\)</span> 必须保持 <span class="math-inline">\(\mathbf R^T\mathbf R=\mathbf I\)</span> 且 <span class="math-inline">\(\det\mathbf R=1\)</span>。直接相加通常会破坏这些约束。</p>
+<p>实际系统用局部旋转向量更新：</p>
+<div class="math-display">\[\mathbf R'
+=
+\mathbf R\operatorname{Exp}(\delta\boldsymbol\theta)
+\quad\text{或}\quad
+\mathbf R'
+=
+\operatorname{Exp}(\delta\boldsymbol\theta)\mathbf R\]</div>
+<p>二者分别对应不同的右扰动或左扰动约定。位姿 <span class="math-inline">\(SE(3)\)</span> 也采用类似的流形更新，这正是统一使用 <span class="math-inline">\(\boxplus\)</span> 表示状态更新的原因。</p>
+<h2 id="28-从-SLAM-代码角度看一次迭代"><a href="#28-从-SLAM-代码角度看一次迭代" class="headerlink" title="28. 从 SLAM 代码角度看一次迭代"></a>28. 从 SLAM 代码角度看一次迭代</h2><p>一次典型迭代大致包括：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">当前状态 x_k</span><br><span class="line">    ↓</span><br><span class="line">建立或更新数据关联</span><br><span class="line">    ↓</span><br><span class="line">计算残差 r_i 与 Jacobian J_i</span><br><span class="line">    ↓</span><br><span class="line">构造并求解局部线性系统</span><br><span class="line">    ↓</span><br><span class="line">得到状态增量 Δx_k</span><br><span class="line">    ↓</span><br><span class="line">在流形上更新状态 x_&#123;k+1&#125;</span><br><span class="line">    ↓</span><br><span class="line">检查收敛；未收敛则重新线性化</span><br></pre></td></tr></table></figure>
+
+<p>ICP、LOAM 等系统在位姿更新后，最近邻、对应平面或点线对应也可能变化。因此重新计算的不只是 Jacobian，残差依赖的数据关联也可能需要更新。</p>
+<h2 id="29-“迭代”真正迭代的是什么？"><a href="#29-“迭代”真正迭代的是什么？" class="headerlink" title="29. “迭代”真正迭代的是什么？"></a>29. “迭代”真正迭代的是什么？</h2><p>“Gauss–Newton 迭代了 5 次”并不是重复五遍相同计算。每轮都可能改变当前状态、预测观测、残差、Jacobian、数据关联、近似 Hessian 和状态增量。</p>
+<p>迭代的本质是：</p>
+<div class="math-display">\[\boxed{
+\text{不断在新位置建立更合适的局部模型}
+}\]</div>
+<h2 id="30-什么时候可以停止迭代？"><a href="#30-什么时候可以停止迭代？" class="headerlink" title="30. 什么时候可以停止迭代？"></a>30. 什么时候可以停止迭代？</h2><p>常见终止条件包括：</p>
+<ul>
+<li>状态增量足够小：<span class="math-inline">\(\lVert\Delta\mathbf x_k\rVert&lt;\epsilon_x\)</span>；</li>
+<li>代价变化足够小：<span class="math-inline">\(|F_{k+1}-F_k|&lt;\epsilon_F\)</span>；</li>
+<li>梯度足够小：<span class="math-inline">\(\lVert\nabla F_k\rVert&lt;\epsilon_g\)</span>；</li>
+<li>达到最大迭代次数。</li>
+</ul>
+<p>实际阈值需要考虑位置、角度、速度等变量的尺度，通常还会同时检查绝对变化和相对变化。</p>
+<h2 id="31-线性化有哪些常见问题？"><a href="#31-线性化有哪些常见问题？" class="headerlink" title="31. 线性化有哪些常见问题？"></a>31. 线性化有哪些常见问题？</h2><h3 id="31-1-增量太大"><a href="#31-1-增量太大" class="headerlink" title="31.1 增量太大"></a>31.1 增量太大</h3><p>步长离开局部模型的可信区域，一阶近似可能失效。LM、信赖域和线搜索都在不同程度上处理“这一步可以走多远”。</p>
+<h3 id="31-2-初值太差"><a href="#31-2-初值太差" class="headerlink" title="31.2 初值太差"></a>31.2 初值太差</h3><p>初值远离正确解时，局部模型可能提供错误方向，甚至无法建立可靠数据关联。</p>
+<h3 id="31-3-Jacobian-错误"><a href="#31-3-Jacobian-错误" class="headerlink" title="31.3 Jacobian 错误"></a>31.3 Jacobian 错误</h3><p>坐标系、残差正负号、链式求导、左&#x2F;右扰动任一处不一致，都会让局部模型失真。</p>
+<h3 id="31-4-函数不够光滑"><a href="#31-4-函数不够光滑" class="headerlink" title="31.4 函数不够光滑"></a>31.4 函数不够光滑</h3><p>硬阈值、离散选择、分段模型与突变会削弱导数信息。某些鲁棒损失虽连续，但在特定点可能不可二阶光滑，也需要求解器正确处理。</p>
+<h3 id="31-5-数据关联发生变化"><a href="#31-5-数据关联发生变化" class="headerlink" title="31.5 数据关联发生变化"></a>31.5 数据关联发生变化</h3><p>最近邻切换会改变目标函数的局部结构。许多点云系统实际上交替执行“建立关联”和“优化位姿”，而不是始终求解一个完全固定的光滑函数。</p>
+<h2 id="32-本篇最重要的三个公式"><a href="#32-本篇最重要的三个公式" class="headerlink" title="32. 本篇最重要的三个公式"></a>32. 本篇最重要的三个公式</h2><p>一阶泰勒展开：</p>
+<div class="math-display">\[\boxed{
+f(x+\Delta x)
+\approx
+f(x)+f'(x)\Delta x
+}\]</div>
+<p>残差线性化：</p>
+<div class="math-display">\[\boxed{
+\mathbf r(\mathbf x\boxplus\Delta\mathbf x)
+\approx
+\mathbf r(\mathbf x)+\mathbf J\Delta\mathbf x,
+\qquad
+\mathbf J=\frac{\partial\mathbf r}{\partial\Delta\mathbf x}
+}\]</div>
+<p>线性化后的带权最小二乘：</p>
+<div class="math-display">\[\boxed{
+\min_{\Delta\mathbf x}
+\frac12
+\lVert\mathbf r+\mathbf J\Delta\mathbf x\rVert_{\mathbf W}^2
+}\]</div>
+<h2 id="33-本篇总结"><a href="#33-本篇总结" class="headerlink" title="33. 本篇总结"></a>33. 本篇总结</h2><figure class="linearization-jacobian-figure linearization-jacobian-figure-wide">
+  <img src="/images/nonlinear-optimization/24-taylor-jacobian-summary.png" alt="" aria-label="图 6 SLAM 从非线性残差出发，在当前状态计算 Jacobian、求解增量、更新状态并重新线性化">
+</figure>
+
+<p>面对非线性目标，优化器选择当前状态 <span class="math-inline">\(\mathbf x_k\)</span>，在其附近建立一阶局部模型：</p>
+<div class="math-display">\[\mathbf r(\mathbf x_k\boxplus\Delta\mathbf x)
+\approx
+\mathbf r_k+\mathbf J_k\Delta\mathbf x\]</div>
+<p>然后求解局部增量并更新：</p>
+<div class="math-display">\[\mathbf x_{k+1}
+=
+\mathbf x_k\boxplus\Delta\mathbf x_k\]</div>
+<p>到新状态后重新计算残差、数据关联与 Jacobian，直到满足终止条件。</p>
+<p>因此非线性优化不是直接一次解决整个复杂函数，而是在不断解决一系列局部线性问题。Jacobian 最核心的含义可以概括为：</p>
+<blockquote>
+<p>状态沿某个局部方向变化一点，残差在一阶意义下会变化多少。</p>
+</blockquote>
+<h2 id="34-下一篇：梯度和-Hessian-到底在告诉优化器什么？"><a href="#34-下一篇：梯度和-Hessian-到底在告诉优化器什么？" class="headerlink" title="34. 下一篇：梯度和 Hessian 到底在告诉优化器什么？"></a>34. 下一篇：梯度和 Hessian 到底在告诉优化器什么？</h2><p>现在已经得到局部模型：</p>
+<div class="math-display">\[\mathbf r(\mathbf x\boxplus\Delta\mathbf x)
+\approx
+\mathbf r+\mathbf J\Delta\mathbf x\]</div>
+<p>接下来还要回答：优化器究竟应该沿哪个方向走、每个方向能走多远？这需要进入目标函数的一阶和二阶结构。</p>
+<p>梯度 <span class="math-inline">\(\nabla F\)</span> 描述局部最陡上升方向，Hessian <span class="math-inline">\(\mathbf H=\nabla^2F\)</span> 则进一步描述误差曲面的曲率、约束强弱和数值条件。</p>
+<p>下一篇标题：</p>
+<blockquote>
+<p>《梯度、Hessian 与误差曲面：优化器到底看到了怎样的“地形”？》</p>
+</blockquote>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://luomengwei.github.io/2026/08/05/taylor-linearization-jacobian-slam-iteration/" data-id="cuidJypxia7kb0ofErRCyEQOS" data-title="泰勒展开、线性化与雅可比：非线性问题为什么要反复求解？" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/Jacobian/" rel="tag">Jacobian</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/SLAM/" rel="tag">SLAM</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E6%B3%B0%E5%8B%92%E5%B1%95%E5%BC%80/" rel="tag">泰勒展开</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/" rel="tag">状态估计</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E7%BA%BF%E6%80%A7%E5%8C%96/" rel="tag">线性化</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E9%9B%85%E5%8F%AF%E6%AF%94/" rel="tag">雅可比</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/" rel="tag">非线性优化</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+  
+    <a href="/2026/08/03/least-squares-mle-map-robot-state-estimation/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">后一篇</strong>
+      <div class="article-nav-title">最小二乘、最大似然与最大后验：为什么残差平方能够估计机器人状态？</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分类</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM/">SLAM</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/">状态估计</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/">非线性优化</a></li></ul></li><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/">SLAM学习笔记</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%95%B0%E5%AD%A6%E5%9F%BA%E7%A1%80/">数学基础</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%95%B0%E5%AD%A6%E5%9F%BA%E7%A1%80/%E4%BC%98%E5%8C%96%E6%96%B9%E6%B3%95/">优化方法</a></li></ul></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/CKF/" rel="tag">CKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/EKF/" rel="tag">EKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESKF/" rel="tag">ESKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/FAST-LIO2/" rel="tag">FAST-LIO2</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Hessian/" rel="tag">Hessian</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IEKF/" rel="tag">IEKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IESKF/" rel="tag">IESKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Jacobian/" rel="tag">Jacobian</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/KF/" rel="tag">KF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LiDAR-IMU/" rel="tag">LiDAR-IMU</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SLAM/" rel="tag">SLAM</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/UKF/" rel="tag">UKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%BB%A3%E4%BB%B7%E5%87%BD%E6%95%B0/" rel="tag">代价函数</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%BC%98%E5%8C%96/" rel="tag">优化</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" rel="tag">传感器融合</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%8D%8F%E6%96%B9%E5%B7%AE/" rel="tag">协方差</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%A4%9A%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" rel="tag">多传感器融合</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">扩展卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%80%E5%A4%A7%E4%BC%BC%E7%84%B6%E4%BC%B0%E8%AE%A1/" rel="tag">最大似然估计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%80%E5%A4%A7%E5%90%8E%E9%AA%8C%E4%BC%B0%E8%AE%A1/" rel="tag">最大后验估计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%80%E5%B0%8F%E4%BA%8C%E4%B9%98/" rel="tag">最小二乘</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA/" rel="tag">机器人</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA%E5%AE%9A%E4%BD%8D/" rel="tag">机器人定位</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%A2%AF%E5%BA%A6/" rel="tag">梯度</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%A2%AF%E5%BA%A6%E4%B8%8B%E9%99%8D/" rel="tag">梯度下降</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%AE%8B%E5%B7%AE/" rel="tag">残差</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%B3%B0%E5%8B%92%E5%B1%95%E5%BC%80/" rel="tag">泰勒展开</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%BF%80%E5%85%89%E6%83%AF%E6%80%A7%E9%87%8C%E7%A8%8B%E8%AE%A1/" rel="tag">激光惯性里程计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%89%9B%E9%A1%BF%E6%B3%95/" rel="tag">牛顿法</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/" rel="tag">状态估计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%B2%92%E5%AD%90%E6%BB%A4%E6%B3%A2/" rel="tag">粒子滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%BA%BF%E6%80%A7%E5%8C%96/" rel="tag">线性化</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E8%AF%AF%E5%B7%AE%E7%8A%B6%E6%80%81%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">误差状态卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E8%BF%AD%E4%BB%A3%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">迭代扩展卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%9B%85%E5%8F%AF%E6%AF%94/" rel="tag">雅可比</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/" rel="tag">非线性优化</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%AB%98%E6%96%AF%E5%88%86%E5%B8%83/" rel="tag">高斯分布</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签云</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/CKF/" style="font-size: 10px;">CKF</a> <a href="/tags/EKF/" style="font-size: 10px;">EKF</a> <a href="/tags/ESKF/" style="font-size: 11.67px;">ESKF</a> <a href="/tags/FAST-LIO2/" style="font-size: 15px;">FAST-LIO2</a> <a href="/tags/Hessian/" style="font-size: 11.67px;">Hessian</a> <a href="/tags/IEKF/" style="font-size: 11.67px;">IEKF</a> <a href="/tags/IESKF/" style="font-size: 13.33px;">IESKF</a> <a href="/tags/Jacobian/" style="font-size: 10px;">Jacobian</a> <a href="/tags/KF/" style="font-size: 10px;">KF</a> <a href="/tags/LiDAR-IMU/" style="font-size: 11.67px;">LiDAR-IMU</a> <a href="/tags/SLAM/" style="font-size: 20px;">SLAM</a> <a href="/tags/UKF/" style="font-size: 10px;">UKF</a> <a href="/tags/%E4%BB%A3%E4%BB%B7%E5%87%BD%E6%95%B0/" style="font-size: 10px;">代价函数</a> <a href="/tags/%E4%BC%98%E5%8C%96/" style="font-size: 11.67px;">优化</a> <a href="/tags/%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" style="font-size: 10px;">传感器融合</a> <a href="/tags/%E5%8D%8F%E6%96%B9%E5%B7%AE/" style="font-size: 10px;">协方差</a> <a href="/tags/%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 16.67px;">卡尔曼滤波</a> <a href="/tags/%E5%A4%9A%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" style="font-size: 10px;">多传感器融合</a> <a href="/tags/%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">扩展卡尔曼滤波</a> <a href="/tags/%E6%9C%80%E5%A4%A7%E4%BC%BC%E7%84%B6%E4%BC%B0%E8%AE%A1/" style="font-size: 10px;">最大似然估计</a> <a href="/tags/%E6%9C%80%E5%A4%A7%E5%90%8E%E9%AA%8C%E4%BC%B0%E8%AE%A1/" style="font-size: 10px;">最大后验估计</a> <a href="/tags/%E6%9C%80%E5%B0%8F%E4%BA%8C%E4%B9%98/" style="font-size: 13.33px;">最小二乘</a> <a href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA/" style="font-size: 10px;">机器人</a> <a href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA%E5%AE%9A%E4%BD%8D/" style="font-size: 13.33px;">机器人定位</a> <a href="/tags/%E6%A2%AF%E5%BA%A6/" style="font-size: 11.67px;">梯度</a> <a href="/tags/%E6%A2%AF%E5%BA%A6%E4%B8%8B%E9%99%8D/" style="font-size: 10px;">梯度下降</a> <a href="/tags/%E6%AE%8B%E5%B7%AE/" style="font-size: 10px;">残差</a> <a href="/tags/%E6%B3%B0%E5%8B%92%E5%B1%95%E5%BC%80/" style="font-size: 13.33px;">泰勒展开</a> <a href="/tags/%E6%BF%80%E5%85%89%E6%83%AF%E6%80%A7%E9%87%8C%E7%A8%8B%E8%AE%A1/" style="font-size: 10px;">激光惯性里程计</a> <a href="/tags/%E7%89%9B%E9%A1%BF%E6%B3%95/" style="font-size: 11.67px;">牛顿法</a> <a href="/tags/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/" style="font-size: 18.33px;">状态估计</a> <a href="/tags/%E7%B2%92%E5%AD%90%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">粒子滤波</a> <a href="/tags/%E7%BA%BF%E6%80%A7%E5%8C%96/" style="font-size: 10px;">线性化</a> <a href="/tags/%E8%AF%AF%E5%B7%AE%E7%8A%B6%E6%80%81%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">误差状态卡尔曼滤波</a> <a href="/tags/%E8%BF%AD%E4%BB%A3%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">迭代扩展卡尔曼滤波</a> <a href="/tags/%E9%9B%85%E5%8F%AF%E6%AF%94/" style="font-size: 10px;">雅可比</a> <a href="/tags/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/" style="font-size: 15px;">非线性优化</a> <a href="/tags/%E9%AB%98%E6%96%AF%E5%88%86%E5%B8%83/" style="font-size: 10px;">高斯分布</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">归档</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/08/">八月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/07/">七月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/06/">六月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/05/">五月 2026</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/08/05/taylor-linearization-jacobian-slam-iteration/">泰勒展开、线性化与雅可比：非线性问题为什么要反复求解？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/08/03/least-squares-mle-map-robot-state-estimation/">最小二乘、最大似然与最大后验：为什么残差平方能够估计机器人状态？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/08/01/slam-state-observation-prediction-residual-cost-function/">状态、观测、预测、残差与代价函数：SLAM 优化问题是怎么构造出来的？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/07/29/why-robots-need-nonlinear-optimization/">机器人为什么离不开非线性优化？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/07/28/ukf-ckf-particle-filter-overview/">除了 EKF，还有哪些滤波方法？UKF、CKF、粒子滤波简单聊聊</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 Tomato<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+<script>window.MathJax = {  tex: {    inlineMath: [['\\(', '\\)']],    displayMath: [['\\[', '\\]']],    processEscapes: true  },  options: {    skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']  },  chtml: {    scale: 1.08  }};</script><script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script></body>
+</html>

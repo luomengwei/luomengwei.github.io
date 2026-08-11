@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>卡尔曼滤波到底在干嘛？一句话：先猜，再改 | Tomato&#39;s Blog</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="用一维小车例子解释卡尔曼滤波的直觉：预测、观测、不确定性和卡尔曼增益。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="卡尔曼滤波到底在干嘛？一句话：先猜，再改">
+<meta property="og:url" content="https://luomengwei.github.io/2026/06/02/kalman-filter-intuition-guess-and-correct/index.html">
+<meta property="og:site_name" content="Tomato&#39;s Blog">
+<meta property="og:description" content="用一维小车例子解释卡尔曼滤波的直觉：预测、观测、不确定性和卡尔曼增益。">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2026-06-01T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-06-02T03:12:56.293Z">
+<meta property="article:author" content="Tomato">
+<meta property="article:tag" content="SLAM">
+<meta property="article:tag" content="传感器融合">
+<meta property="article:tag" content="卡尔曼滤波">
+<meta property="article:tag" content="机器人定位">
+<meta property="article:tag" content="状态估计">
+<meta name="twitter:card" content="summary">
+  
+    <link rel="alternate" href="/atom.xml" title="Tomato's Blog" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
+
+<!-- hexo injector head_end start --><link rel="stylesheet" href="/css/custom.css"><!-- hexo injector head_end end --><meta name="generator" content="Hexo 8.1.2"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Tomato&#39;s Blog</a>
+      </h1>
+      
+        <h2 id="subtitle-wrap">
+          <a href="/" id="subtitle">Robotics, SLAM and LiDAR-IMU Notes</a>
+        </h2>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS 订阅"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="搜索"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜索"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://luomengwei.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-kalman-filter-intuition-guess-and-correct" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/06/02/kalman-filter-intuition-guess-and-correct/" class="article-date">
+  <time class="dt-published" datetime="2026-06-01T16:00:00.000Z" itemprop="datePublished">2026-06-02</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/SLAM/">SLAM</a>►<a class="article-category-link" href="/categories/SLAM/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/">状态估计</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      卡尔曼滤波到底在干嘛？一句话：先猜，再改
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>这篇笔记用一个一维小车例子，先建立卡尔曼滤波的直觉：预测不一定准，观测也不一定准，所以要根据不确定性决定这次更相信谁。</p>
+<span id="more"></span>
+<style>
+.kf-diagram {
+  margin: 1.6em auto;
+  padding: 18px 20px;
+  max-width: 820px;
+  border: 1px solid #d9e5f6;
+  border-radius: 8px;
+  background: #f8fbff;
+  color: #334155;
+}
+
+.kf-diagram figcaption {
+  margin-top: 12px;
+  text-align: center;
+  color: #64748b;
+  font-size: 0.92em;
+}
+
+.kf-flow,
+.kf-merge,
+.kf-line,
+.kf-loop {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.kf-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.kf-node {
+  min-width: 132px;
+  padding: 10px 14px;
+  border: 1px solid #9ec5fe;
+  border-radius: 6px;
+  background: #fff;
+  text-align: center;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.kf-node strong {
+  display: block;
+  margin-bottom: 3px;
+  color: #1d4ed8;
+}
+
+.kf-node small {
+  color: #64748b;
+}
+
+.kf-arrow {
+  color: #2563eb;
+  font-weight: 700;
+}
+
+.kf-case-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.kf-case {
+  padding: 14px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+}
+
+.kf-case h4 {
+  margin: 0 0 10px;
+  color: #0f172a;
+  font-size: 1em;
+}
+
+.kf-line {
+  gap: 0;
+}
+
+.kf-line .kf-node {
+  min-width: 150px;
+}
+
+.kf-line-seg {
+  width: 54px;
+  height: 2px;
+  background: #2563eb;
+}
+
+@media (max-width: 720px) {
+  .kf-diagram {
+    padding: 14px;
+  }
+
+  .kf-case-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .kf-arrow {
+    width: 100%;
+    text-align: center;
+  }
+}
+</style>
+<p>上一篇笔记里，我们聊了一个很现实的问题：</p>
+<blockquote>
+<p>机器人想知道自己在哪，但传感器并没有那么靠谱。</p>
+</blockquote>
+<p>IMU 会漂，轮速计怕打滑，LiDAR 怕退化和重复结构，相机怕光照和弱纹理。<br>所以机器人定位不能简单地“读一个传感器数值”，而是要在一堆带噪声、有误差、甚至互相矛盾的信息中，估计出一个当前最合理的状态。</p>
+<p>这时候，卡尔曼滤波就该登场了。</p>
+<p>不过先别急着背公式。</p>
+<p>卡尔曼滤波最核心的思想，其实可以用一句话概括：</p>
+<blockquote>
+<p><strong>先根据运动预测一下，再根据观测修正一下。</strong></p>
+</blockquote>
+<p>再口语一点，就是：</p>
+<blockquote>
+<p><strong>先猜，再改。</strong></p>
+</blockquote>
+<p>当然，这里的“猜”不是瞎猜，而是根据运动模型预测；<br>这里的“改”也不是乱改，而是根据传感器观测和不确定性进行修正。</p>
+<p>这一篇我们先不堆复杂公式，重点理解卡尔曼滤波到底在干什么。</p>
+<hr>
+<h2 id="1-先从一个小车例子开始"><a href="#1-先从一个小车例子开始" class="headerlink" title="1. 先从一个小车例子开始"></a>1. 先从一个小车例子开始</h2><p>假设有一辆小车在直线上运动。</p>
+<p>上一秒，它在：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">x = 0 m</span><br></pre></td></tr></table></figure>
+
+<p>它的速度大概是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">v = 1 m/s</span><br></pre></td></tr></table></figure>
+
+<p>现在过了 1 秒。</p>
+<p>如果小车确实按照 1 m&#x2F;s 的速度前进，那么我们可以预测它现在的位置是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">x = 1 m</span><br></pre></td></tr></table></figure>
+
+<p>这一步就是<strong>预测</strong>。</p>
+<p>但是，真实世界没有这么听话。</p>
+<p>小车可能轮子有点打滑；<br>速度可能不是刚好 1 m&#x2F;s；<br>传感器可能有噪声；<br>地面可能有点不平；<br>控制指令也可能执行得不是非常准确。</p>
+<p>所以预测出来的 <code>1 m</code> 不一定完全正确。</p>
+<p>这时候，我们又用一个传感器测了一下位置，传感器说：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">x = 1.2 m</span><br></pre></td></tr></table></figure>
+
+<p>问题来了：</p>
+<blockquote>
+<p>小车现在到底是在 1 m，还是 1.2 m？</p>
+</blockquote>
+<p>你可能会说，那就相信传感器呗。</p>
+<p>但传感器也不一定完全准。<br>它可能也有噪声，也可能受到环境影响。</p>
+<p>所以卡尔曼滤波不会直接相信预测，也不会直接相信观测。</p>
+<p>它会做一件更稳妥的事：</p>
+<blockquote>
+<p>看看预测有多可信，观测有多可信，然后折中得到一个更合理的估计。</p>
+</blockquote>
+<p>比如最后得到：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">x = 1.08 m</span><br></pre></td></tr></table></figure>
+
+<p>这就是卡尔曼滤波的味道了。</p>
+<p>它不是“谁声音大听谁的”，而是“谁更靠谱，就多信谁一点”。</p>
+<hr>
+<h2 id="2-卡尔曼滤波解决的核心矛盾"><a href="#2-卡尔曼滤波解决的核心矛盾" class="headerlink" title="2. 卡尔曼滤波解决的核心矛盾"></a>2. 卡尔曼滤波解决的核心矛盾</h2><p>卡尔曼滤波面对的核心矛盾是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">预测值：我根据运动模型推出来的位置</span><br><span class="line">观测值：传感器告诉我的位置</span><br></pre></td></tr></table></figure>
+
+<p>但是这两者都有可能不准。</p>
+<p>预测可能不准，是因为运动模型不完美。<br>观测可能不准，是因为传感器有噪声。</p>
+<p>于是卡尔曼滤波需要回答一个问题：</p>
+<blockquote>
+<p>当前这一步，到底应该更相信预测，还是更相信观测？</p>
+</blockquote>
+<p>这件事可以用图 1 来理解。</p>
+<figure class="kf-diagram">
+  <div class="kf-merge">
+    <div class="kf-stack">
+      <div class="kf-node"><strong>上一时刻状态</strong><small>已知的上一步估计</small></div>
+      <div class="kf-node"><strong>传感器观测</strong><small>这次测到的数据</small></div>
+    </div>
+    <div class="kf-arrow">→</div>
+    <div class="kf-stack">
+      <div class="kf-node"><strong>运动模型预测</strong><small>我觉得我在这里</small></div>
+      <div class="kf-node"><strong>观测值</strong><small>传感器说我在这里</small></div>
+    </div>
+    <div class="kf-arrow">→</div>
+    <div class="kf-node"><strong>卡尔曼滤波</strong><small>权衡谁更可信</small></div>
+    <div class="kf-arrow">→</div>
+    <div class="kf-node"><strong>融合后的状态估计</strong><small>更靠谱的位置</small></div>
+  </div>
+  <figcaption>图1 卡尔曼滤波要融合预测值和观测值</figcaption>
+</figure>
+
+<p>图 1 展示的就是卡尔曼滤波最基本的工作方式：</p>
+<ol>
+<li>根据上一时刻状态和运动模型，得到一个预测值；</li>
+<li>根据传感器数据，得到一个观测值；</li>
+<li>比较预测和观测；</li>
+<li>根据两者的不确定性，得到一个融合后的估计值。</li>
+</ol>
+<p>你可以把卡尔曼滤波想成一个比较冷静的裁判。</p>
+<p>预测说：</p>
+<blockquote>
+<p>我觉得机器人现在在这里。</p>
+</blockquote>
+<p>观测说：</p>
+<blockquote>
+<p>不对，我测到它在那里。</p>
+</blockquote>
+<p>卡尔曼滤波说：</p>
+<blockquote>
+<p>你们俩先别吵，我看看谁这次更靠谱。</p>
+</blockquote>
+<hr>
+<h2 id="3-为什么不能简单取平均？"><a href="#3-为什么不能简单取平均？" class="headerlink" title="3. 为什么不能简单取平均？"></a>3. 为什么不能简单取平均？</h2><p>有人可能会想：</p>
+<blockquote>
+<p>预测是 1 m，观测是 1.2 m，那直接取平均 1.1 m 不就行了吗？</p>
+</blockquote>
+<p>有时候看起来确实可以。<br>但问题在于，预测和观测的可信程度并不总是一样。</p>
+<p>比如：</p>
+<h3 id="情况一：预测很准，观测很差"><a href="#情况一：预测很准，观测很差" class="headerlink" title="情况一：预测很准，观测很差"></a>情况一：预测很准，观测很差</h3><p>假设小车运动很稳定，速度模型很靠谱。<br>但是传感器这次受到了干扰，测量噪声很大。</p>
+<p>这时候预测值 <code>1.0 m</code> 可能更可靠，而观测值 <code>1.2 m</code> 可能有点飘。</p>
+<p>那最后估计值就应该更靠近预测值，比如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">x = 1.03 m</span><br></pre></td></tr></table></figure>
+
+<hr>
+<h3 id="情况二：预测很差，观测很准"><a href="#情况二：预测很差，观测很准" class="headerlink" title="情况二：预测很差，观测很准"></a>情况二：预测很差，观测很准</h3><p>假设小车刚刚打滑了，运动模型已经不太可靠。<br>但是外部传感器测量很准。</p>
+<p>这时候观测值 <code>1.2 m</code> 可能更可靠。</p>
+<p>那最后估计值就应该更靠近观测值，比如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">x = 1.18 m</span><br></pre></td></tr></table></figure>
+
+<hr>
+<p>所以卡尔曼滤波不是简单平均，而是<strong>加权融合</strong>。</p>
+<p>更准确地说，它是根据预测和观测各自的不确定性，自动决定这次融合时该偏向哪边。</p>
+<p>这也是卡尔曼滤波最精髓的地方。</p>
+<blockquote>
+<p>它不是平均主义，而是讲证据、讲可信度。</p>
+</blockquote>
+<hr>
+<h2 id="4-不确定性：系统对自己有多不自信"><a href="#4-不确定性：系统对自己有多不自信" class="headerlink" title="4. 不确定性：系统对自己有多不自信"></a>4. 不确定性：系统对自己有多不自信</h2><p>理解卡尔曼滤波，一定要理解“不确定性”。</p>
+<p>在机器人状态估计里，系统不仅要估计：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">我在哪里？</span><br></pre></td></tr></table></figure>
+
+<p>还要估计：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">我对这个结果有多自信？</span><br></pre></td></tr></table></figure>
+
+<p>如果系统非常自信，说明它认为当前状态估计比较可靠。<br>如果系统不太自信，说明它知道自己可能估错了。</p>
+<p>这个“不自信程度”，在卡尔曼滤波里通常用<strong>协方差</strong>来描述。</p>
+<p>先不用纠结协方差矩阵长什么样，可以先把它理解成：</p>
+<blockquote>
+<p>协方差越大，说明系统越不自信；<br>协方差越小，说明系统越自信。</p>
+</blockquote>
+<p>比如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">预测结果：x = 1.0 m</span><br><span class="line">预测不确定性：很小</span><br></pre></td></tr></table></figure>
+
+<p>意思是：</p>
+<blockquote>
+<p>我觉得小车在 1.0 m 附近，而且我挺有把握。</p>
+</blockquote>
+<p>再比如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">观测结果：x = 1.2 m</span><br><span class="line">观测不确定性：很大</span><br></pre></td></tr></table></figure>
+
+<p>意思是：</p>
+<blockquote>
+<p>传感器测到 1.2 m，但这个测量可能不太稳。</p>
+</blockquote>
+<p>这时候，卡尔曼滤波就会更偏向预测。</p>
+<p>反过来，如果预测不确定性很大，而观测不确定性很小，它就会更偏向观测。</p>
+<p>这可以用图 2 来理解。</p>
+<figure class="kf-diagram">
+  <div class="kf-case-grid">
+    <div class="kf-case">
+      <h4>预测更可信</h4>
+      <div class="kf-flow">
+        <div class="kf-node"><strong>预测不确定性小</strong><small>预测更稳</small></div>
+        <div class="kf-node"><strong>观测不确定性大</strong><small>观测较飘</small></div>
+        <div class="kf-arrow">→</div>
+        <div class="kf-node"><strong>估计结果</strong><small>更靠近预测值</small></div>
+      </div>
+    </div>
+    <div class="kf-case">
+      <h4>观测更可信</h4>
+      <div class="kf-flow">
+        <div class="kf-node"><strong>预测不确定性大</strong><small>模型不稳</small></div>
+        <div class="kf-node"><strong>观测不确定性小</strong><small>测量更准</small></div>
+        <div class="kf-arrow">→</div>
+        <div class="kf-node"><strong>估计结果</strong><small>更靠近观测值</small></div>
+      </div>
+    </div>
+  </div>
+  <figcaption>图2 不确定性决定更相信谁</figcaption>
+</figure>
+
+<p>所以卡尔曼滤波并不是固定地相信某一个传感器。<br>它更像是一个动态权衡器：</p>
+<blockquote>
+<p>谁这次更靠谱，就多听谁一点。</p>
+</blockquote>
+<hr>
+<h2 id="5-卡尔曼增益：信任分配器"><a href="#5-卡尔曼增益：信任分配器" class="headerlink" title="5. 卡尔曼增益：信任分配器"></a>5. 卡尔曼增益：信任分配器</h2><p>前面一直在说“更相信谁”，那卡尔曼滤波到底靠什么来决定？</p>
+<p>答案是：<strong>卡尔曼增益</strong>。</p>
+<p>卡尔曼增益可以先理解成一个“信任分配器”。</p>
+<p>它决定了这次观测对预测结果的修正力度有多大。</p>
+<p>可以先看一个非常简化的表达：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">最终估计 = 预测值 + K × (观测值 - 预测值)</span><br></pre></td></tr></table></figure>
+
+<p>这里的 <code>K</code> 就是卡尔曼增益。</p>
+<p>其中：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">观测值 - 预测值</span><br></pre></td></tr></table></figure>
+
+<p>表示观测和预测之间差了多少。</p>
+<p>这个差值也经常叫做：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">残差</span><br></pre></td></tr></table></figure>
+
+<p>或者：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">创新</span><br></pre></td></tr></table></figure>
+
+<p>如果观测值和预测值差得很大，说明两者意见不一致。<br>但是到底要不要大幅修正，还要看 <code>K</code> 有多大。</p>
+<hr>
+<h3 id="5-1-K-很小：少修正"><a href="#5-1-K-很小：少修正" class="headerlink" title="5.1 K 很小：少修正"></a>5.1 K 很小：少修正</h3><p>如果 <code>K</code> 很小，比如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">K = 0.1</span><br></pre></td></tr></table></figure>
+
+<p>那么：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">最终估计 = 预测值 + 0.1 × (观测值 - 预测值)</span><br></pre></td></tr></table></figure>
+
+<p>这意味着：</p>
+<blockquote>
+<p>我听到了观测的意见，但我只采纳一点点。</p>
+</blockquote>
+<p>这种情况通常说明预测比较可信，观测不太可信。</p>
+<p>就像一个老师批改作业时，学生说：</p>
+<blockquote>
+<p>老师我觉得我应该满分。</p>
+</blockquote>
+<p>老师看了看卷子：</p>
+<blockquote>
+<p>嗯，你的想法我知道了，但我不完全采纳。</p>
+</blockquote>
+<hr>
+<h3 id="5-2-K-很大：多修正"><a href="#5-2-K-很大：多修正" class="headerlink" title="5.2 K 很大：多修正"></a>5.2 K 很大：多修正</h3><p>如果 <code>K</code> 比较大，比如：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">K = 0.8</span><br></pre></td></tr></table></figure>
+
+<p>那么观测对最终结果影响就很大。</p>
+<p>这意味着：</p>
+<blockquote>
+<p>我觉得观测这次更靠谱，所以多往观测方向修正。</p>
+</blockquote>
+<p>这通常发生在预测不太可靠，而观测比较可靠的时候。</p>
+<hr>
+<h2 id="6-用一个数字例子看懂-K"><a href="#6-用一个数字例子看懂-K" class="headerlink" title="6. 用一个数字例子看懂 K"></a>6. 用一个数字例子看懂 K</h2><p>还是前面那个小车例子。</p>
+<p>预测值是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">x_predict = 1.0 m</span><br></pre></td></tr></table></figure>
+
+<p>观测值是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">z = 1.2 m</span><br></pre></td></tr></table></figure>
+
+<p>两者差值是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">z - x_predict = 0.2 m</span><br></pre></td></tr></table></figure>
+
+<p>如果卡尔曼增益是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">K = 0.2</span><br></pre></td></tr></table></figure>
+
+<p>那么：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">x = 1.0 + 0.2 × 0.2</span><br><span class="line">x = 1.04 m</span><br></pre></td></tr></table></figure>
+
+<p>最终结果比较靠近预测值。</p>
+<p>如果卡尔曼增益是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">K = 0.8</span><br></pre></td></tr></table></figure>
+
+<p>那么：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">x = 1.0 + 0.8 × 0.2</span><br><span class="line">x = 1.16 m</span><br></pre></td></tr></table></figure>
+
+<p>最终结果更靠近观测值。</p>
+<p>这个例子说明：</p>
+<blockquote>
+<p>卡尔曼增益越大，越相信观测；<br>卡尔曼增益越小，越相信预测。</p>
+</blockquote>
+<p>当然，真实卡尔曼滤波里的状态通常不是一个数字，而是一个向量；<br>卡尔曼增益也不是一个简单数字，而是一个矩阵。</p>
+<p>但直觉上，它仍然是在做同一件事：</p>
+<blockquote>
+<p>决定这次该用观测把预测往回拉多少。</p>
+</blockquote>
+<hr>
+<h2 id="7-图解：预测值、观测值和最终估计"><a href="#7-图解：预测值、观测值和最终估计" class="headerlink" title="7. 图解：预测值、观测值和最终估计"></a>7. 图解：预测值、观测值和最终估计</h2><p>为了更直观地理解，可以把预测值、观测值和最终估计画在一条线上。</p>
+<figure class="kf-diagram">
+  <div class="kf-line">
+    <div class="kf-node"><strong>预测值</strong><small>x = 1.0 m</small></div>
+    <div class="kf-line-seg"></div>
+    <div class="kf-node"><strong>最终估计</strong><small>x = 1.08 m</small></div>
+    <div class="kf-line-seg"></div>
+    <div class="kf-node"><strong>观测值</strong><small>z = 1.2 m</small></div>
+  </div>
+  <figcaption>图3 最终估计通常位于预测值和观测值之间</figcaption>
+</figure>
+
+<p>注意，最终估计不一定永远在两者正中间。<br>它靠近哪一边，取决于哪一边更可信。</p>
+<p>这也是卡尔曼滤波比简单平均更合理的地方。</p>
+<p>如果用一句话总结图 3：</p>
+<blockquote>
+<p>最终估计不是简单站队，而是在预测和观测之间做一次理性的偏心。</p>
+</blockquote>
+<p>这个“偏心”不是不公平，而是因为有一边确实更可信。</p>
+<hr>
+<h2 id="8-卡尔曼滤波的两个阶段"><a href="#8-卡尔曼滤波的两个阶段" class="headerlink" title="8. 卡尔曼滤波的两个阶段"></a>8. 卡尔曼滤波的两个阶段</h2><p>到这里，我们可以把卡尔曼滤波的整体流程整理成两个阶段：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">预测阶段</span><br><span class="line">更新阶段</span><br></pre></td></tr></table></figure>
+
+<p>也可以叫：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">Prediction</span><br><span class="line">Update</span><br></pre></td></tr></table></figure>
+
+<hr>
+<h3 id="8-1-预测阶段：根据运动模型往前推"><a href="#8-1-预测阶段：根据运动模型往前推" class="headerlink" title="8.1 预测阶段：根据运动模型往前推"></a>8.1 预测阶段：根据运动模型往前推</h3><p>预测阶段做的事情是：</p>
+<blockquote>
+<p>根据上一时刻状态和运动模型，预测当前状态。</p>
+</blockquote>
+<p>比如小车上一时刻在 <code>0 m</code>，速度是 <code>1 m/s</code>，过了 1 秒，预测它现在在 <code>1 m</code>。</p>
+<p>同时，系统也会预测当前状态的不确定性。</p>
+<p>因为机器人运动过程中会受到噪声影响，所以预测之后，系统通常会变得更不自信一点。</p>
+<p>这很好理解。</p>
+<p>你闭着眼往前走，每走一步，你对自己位置的把握就会差一点。<br>除非你是机器人界的绝对路感王，但一般不是。</p>
+<p>所以预测阶段通常会让不确定性变大。</p>
+<hr>
+<h3 id="8-2-更新阶段：根据观测修正预测"><a href="#8-2-更新阶段：根据观测修正预测" class="headerlink" title="8.2 更新阶段：根据观测修正预测"></a>8.2 更新阶段：根据观测修正预测</h3><p>更新阶段做的事情是：</p>
+<blockquote>
+<p>用传感器观测来修正预测结果。</p>
+</blockquote>
+<p>如果传感器观测很可靠，它就会把状态往观测方向多拉一点。<br>如果传感器观测不太可靠，它就少拉一点。</p>
+<p>更新之后，系统通常会变得更自信。</p>
+<p>因为观测提供了新的信息。</p>
+<p>这就像你闭着眼走了一段路之后，睁眼看了一下周围环境。<br>看完以后，你对自己位置的判断一般会更靠谱一些。</p>
+<p>所以更新阶段通常会让不确定性变小。</p>
+<hr>
+<h2 id="9-图解：预测让不确定性变大，观测让不确定性变小"><a href="#9-图解：预测让不确定性变大，观测让不确定性变小" class="headerlink" title="9. 图解：预测让不确定性变大，观测让不确定性变小"></a>9. 图解：预测让不确定性变大，观测让不确定性变小</h2><p>状态估计不是只更新位置，也在更新“不确定性”。</p>
+<p>这个过程可以用图 4 来概括。</p>
+<figure class="kf-diagram">
+  <div class="kf-loop">
+    <div class="kf-node"><strong>上一时刻状态</strong><small>比较确定</small></div>
+    <div class="kf-arrow">→</div>
+    <div class="kf-node"><strong>运动预测</strong><small>往前推一步</small></div>
+    <div class="kf-arrow">→</div>
+    <div class="kf-node"><strong>预测后状态</strong><small>不确定性变大</small></div>
+    <div class="kf-arrow">→</div>
+    <div class="kf-node"><strong>传感器观测</strong><small>看到新信息</small></div>
+    <div class="kf-arrow">→</div>
+    <div class="kf-node"><strong>观测修正</strong><small>把状态拉回来</small></div>
+    <div class="kf-arrow">→</div>
+    <div class="kf-node"><strong>更新后状态</strong><small>不确定性变小</small></div>
+  </div>
+  <figcaption>图4 预测和更新对不确定性的影响</figcaption>
+</figure>
+
+<p>可以简单记：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">预测：往前走一步，不确定性通常变大</span><br><span class="line">更新：看一眼环境，不确定性通常变小</span><br></pre></td></tr></table></figure>
+
+<p>当然，这只是直觉上的理解。<br>真实系统中还要看模型噪声、观测噪声和具体场景。</p>
+<p>但作为入门理解，这个结论很重要。</p>
+<hr>
+<h2 id="10-卡尔曼滤波不是魔法"><a href="#10-卡尔曼滤波不是魔法" class="headerlink" title="10. 卡尔曼滤波不是魔法"></a>10. 卡尔曼滤波不是魔法</h2><p>卡尔曼滤波听起来很高级，但它不是魔法。</p>
+<p>它不能凭空消除错误。<br>它也不能让一个完全错误的模型突然变得正确。</p>
+<p>它依赖几个前提：</p>
+<ol>
+<li>运动模型不能太离谱；</li>
+<li>观测模型要能描述传感器和状态之间的关系；</li>
+<li>噪声特性要设置得比较合理；</li>
+<li>初始状态不能差得太离谱；</li>
+<li>系统要有足够的信息约束。</li>
+</ol>
+<p>如果这些条件很差，卡尔曼滤波也会崩。</p>
+<p>比如机器人明明轮子打滑严重，但你还告诉滤波器：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">轮速计非常可靠，放心大胆地信。</span><br></pre></td></tr></table></figure>
+
+<p>那它很可能就会被轮速计带偏。</p>
+<p>再比如 LiDAR 在长走廊里几何约束很弱，但你还告诉滤波器：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">这帧 LiDAR 观测很强，赶紧大幅修正。</span><br></pre></td></tr></table></figure>
+
+<p>那滤波器也可能会被错误观测拉偏。</p>
+<p>所以卡尔曼滤波不是“万能融合器”。</p>
+<p>它更像是一个很讲逻辑的融合框架：</p>
+<blockquote>
+<p>你给我合理的模型和噪声，我就尽量给你合理的估计。</p>
+</blockquote>
+<p>如果你给它的假设本身就有问题，它也只能一本正经地算出一个不太靠谱的结果。</p>
+<hr>
+<h2 id="11-放回机器人-SLAM-里看"><a href="#11-放回机器人-SLAM-里看" class="headerlink" title="11. 放回机器人 SLAM 里看"></a>11. 放回机器人 SLAM 里看</h2><p>现在我们把这个思想放回机器人 SLAM。</p>
+<p>机器人在运动过程中，每一时刻都需要估计自己的状态。<br>这个状态可能包括：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">位置</span><br><span class="line">姿态</span><br><span class="line">速度</span><br><span class="line">IMU 偏置</span><br><span class="line">传感器外参</span><br><span class="line">不确定性</span><br></pre></td></tr></table></figure>
+
+<p>预测阶段通常来自：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">IMU</span><br><span class="line">轮速计</span><br><span class="line">运动模型</span><br><span class="line">控制输入</span><br></pre></td></tr></table></figure>
+
+<p>观测阶段通常来自：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">LiDAR</span><br><span class="line">相机</span><br><span class="line">GPS</span><br><span class="line">地图匹配结果</span><br></pre></td></tr></table></figure>
+
+<p>比如在 LiDAR-IMU 系统里：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">IMU：负责高频预测</span><br><span class="line">LiDAR：负责根据环境结构修正</span><br></pre></td></tr></table></figure>
+
+<p>这其实就是卡尔曼滤波思想的一个典型应用。</p>
+<p>IMU 预测说：</p>
+<blockquote>
+<p>我觉得机器人现在应该在这里。</p>
+</blockquote>
+<p>LiDAR 匹配地图后说：</p>
+<blockquote>
+<p>按照墙面和柱子的位置看，你好像偏了一点。</p>
+</blockquote>
+<p>滤波器综合两边的信息，最后更新机器人状态。</p>
+<p>这就是“预测 + 修正”在机器人系统中的具体体现。</p>
+<hr>
+<h2 id="12-和上一篇笔记的关系"><a href="#12-和上一篇笔记的关系" class="headerlink" title="12. 和上一篇笔记的关系"></a>12. 和上一篇笔记的关系</h2><p>上一篇我们讲的是：</p>
+<blockquote>
+<p>为什么机器人需要状态估计？</p>
+</blockquote>
+<p>因为传感器不完美，所以需要融合。</p>
+<p>这一篇我们讲的是：</p>
+<blockquote>
+<p>卡尔曼滤波到底在干嘛？</p>
+</blockquote>
+<p>答案就是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">根据运动模型预测</span><br><span class="line">根据传感器观测修正</span><br><span class="line">根据不确定性决定信谁多一点</span><br></pre></td></tr></table></figure>
+
+<p>如果把两篇连起来看，主线就是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">机器人需要知道自己在哪</span><br><span class="line">        ↓</span><br><span class="line">单个传感器不完全可靠</span><br><span class="line">        ↓</span><br><span class="line">需要状态估计</span><br><span class="line">        ↓</span><br><span class="line">状态估计可以理解成预测 + 修正</span><br><span class="line">        ↓</span><br><span class="line">卡尔曼滤波就是一种经典的预测 + 修正框架</span><br></pre></td></tr></table></figure>
+
+<p>到这里，卡尔曼滤波的直觉就基本建立起来了。</p>
+<hr>
+<h2 id="13-这一篇只讲直觉，下一篇开始讲标准-KF"><a href="#13-这一篇只讲直觉，下一篇开始讲标准-KF" class="headerlink" title="13. 这一篇只讲直觉，下一篇开始讲标准 KF"></a>13. 这一篇只讲直觉，下一篇开始讲标准 KF</h2><p>这一篇我们刻意没有推完整公式。<br>因为一上来就堆矩阵，很容易出现一种情况：</p>
+<blockquote>
+<p>公式看完了，脑子也下线了。</p>
+</blockquote>
+<p>所以这一篇只抓核心思想：</p>
+<ol>
+<li>预测值和观测值都不一定准；</li>
+<li>卡尔曼滤波要在两者之间做权衡；</li>
+<li>不确定性决定该更相信谁；</li>
+<li>卡尔曼增益决定修正幅度；</li>
+<li>预测阶段通常让不确定性变大；</li>
+<li>更新阶段通常让不确定性变小。</li>
+</ol>
+<p>下一篇我们就可以正式进入标准卡尔曼滤波 KF。</p>
+<p>我们会从最简单的一维小车开始，看它的状态怎么定义、运动模型怎么写、观测模型怎么写，以及那几个经典公式到底是什么意思。</p>
+<p>先不用怕公式。</p>
+<p>只要你记住这一篇的核心：</p>
+<blockquote>
+<p>卡尔曼滤波不是为了炫数学，而是为了解决一个很朴素的问题：<br><strong>预测和观测都不完美时，怎么融合出一个更靠谱的状态？</strong></p>
+</blockquote>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://luomengwei.github.io/2026/06/02/kalman-filter-intuition-guess-and-correct/" data-id="cuidYEOZ3X_xraVMsm0Jv1X5Y" data-title="卡尔曼滤波到底在干嘛？一句话：先猜，再改" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/SLAM/" rel="tag">SLAM</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" rel="tag">传感器融合</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">卡尔曼滤波</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA%E5%AE%9A%E4%BD%8D/" rel="tag">机器人定位</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/" rel="tag">状态估计</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2026/06/04/ekf-extended-kalman-filter-nonlinear-world/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">前一篇</strong>
+      <div class="article-nav-title">
+        
+          EKF 扩展卡尔曼滤波：当机器人世界不再是直线
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2026/06/02/standard-kalman-filter-1d-car/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">后一篇</strong>
+      <div class="article-nav-title">标准卡尔曼滤波 KF：从一辆只会直线运动的小车开始</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分类</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM/">SLAM</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/">状态估计</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/">非线性优化</a></li></ul></li><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/">SLAM学习笔记</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%95%B0%E5%AD%A6%E5%9F%BA%E7%A1%80/">数学基础</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%95%B0%E5%AD%A6%E5%9F%BA%E7%A1%80/%E4%BC%98%E5%8C%96%E6%96%B9%E6%B3%95/">优化方法</a></li></ul></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/CKF/" rel="tag">CKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/EKF/" rel="tag">EKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESKF/" rel="tag">ESKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/FAST-LIO2/" rel="tag">FAST-LIO2</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Hessian/" rel="tag">Hessian</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IEKF/" rel="tag">IEKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IESKF/" rel="tag">IESKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Jacobian/" rel="tag">Jacobian</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/KF/" rel="tag">KF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LiDAR-IMU/" rel="tag">LiDAR-IMU</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SLAM/" rel="tag">SLAM</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/UKF/" rel="tag">UKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%BB%A3%E4%BB%B7%E5%87%BD%E6%95%B0/" rel="tag">代价函数</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%BC%98%E5%8C%96/" rel="tag">优化</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" rel="tag">传感器融合</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%8D%8F%E6%96%B9%E5%B7%AE/" rel="tag">协方差</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%A4%9A%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" rel="tag">多传感器融合</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">扩展卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%80%E5%A4%A7%E4%BC%BC%E7%84%B6%E4%BC%B0%E8%AE%A1/" rel="tag">最大似然估计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%80%E5%A4%A7%E5%90%8E%E9%AA%8C%E4%BC%B0%E8%AE%A1/" rel="tag">最大后验估计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%80%E5%B0%8F%E4%BA%8C%E4%B9%98/" rel="tag">最小二乘</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA/" rel="tag">机器人</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA%E5%AE%9A%E4%BD%8D/" rel="tag">机器人定位</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%A2%AF%E5%BA%A6/" rel="tag">梯度</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%A2%AF%E5%BA%A6%E4%B8%8B%E9%99%8D/" rel="tag">梯度下降</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%AE%8B%E5%B7%AE/" rel="tag">残差</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%B3%B0%E5%8B%92%E5%B1%95%E5%BC%80/" rel="tag">泰勒展开</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%BF%80%E5%85%89%E6%83%AF%E6%80%A7%E9%87%8C%E7%A8%8B%E8%AE%A1/" rel="tag">激光惯性里程计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%89%9B%E9%A1%BF%E6%B3%95/" rel="tag">牛顿法</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/" rel="tag">状态估计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%B2%92%E5%AD%90%E6%BB%A4%E6%B3%A2/" rel="tag">粒子滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%BA%BF%E6%80%A7%E5%8C%96/" rel="tag">线性化</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E8%AF%AF%E5%B7%AE%E7%8A%B6%E6%80%81%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">误差状态卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E8%BF%AD%E4%BB%A3%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">迭代扩展卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%9B%85%E5%8F%AF%E6%AF%94/" rel="tag">雅可比</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/" rel="tag">非线性优化</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%AB%98%E6%96%AF%E5%88%86%E5%B8%83/" rel="tag">高斯分布</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签云</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/CKF/" style="font-size: 10px;">CKF</a> <a href="/tags/EKF/" style="font-size: 10px;">EKF</a> <a href="/tags/ESKF/" style="font-size: 11.67px;">ESKF</a> <a href="/tags/FAST-LIO2/" style="font-size: 15px;">FAST-LIO2</a> <a href="/tags/Hessian/" style="font-size: 11.67px;">Hessian</a> <a href="/tags/IEKF/" style="font-size: 11.67px;">IEKF</a> <a href="/tags/IESKF/" style="font-size: 13.33px;">IESKF</a> <a href="/tags/Jacobian/" style="font-size: 10px;">Jacobian</a> <a href="/tags/KF/" style="font-size: 10px;">KF</a> <a href="/tags/LiDAR-IMU/" style="font-size: 11.67px;">LiDAR-IMU</a> <a href="/tags/SLAM/" style="font-size: 20px;">SLAM</a> <a href="/tags/UKF/" style="font-size: 10px;">UKF</a> <a href="/tags/%E4%BB%A3%E4%BB%B7%E5%87%BD%E6%95%B0/" style="font-size: 10px;">代价函数</a> <a href="/tags/%E4%BC%98%E5%8C%96/" style="font-size: 11.67px;">优化</a> <a href="/tags/%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" style="font-size: 10px;">传感器融合</a> <a href="/tags/%E5%8D%8F%E6%96%B9%E5%B7%AE/" style="font-size: 10px;">协方差</a> <a href="/tags/%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 16.67px;">卡尔曼滤波</a> <a href="/tags/%E5%A4%9A%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" style="font-size: 10px;">多传感器融合</a> <a href="/tags/%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">扩展卡尔曼滤波</a> <a href="/tags/%E6%9C%80%E5%A4%A7%E4%BC%BC%E7%84%B6%E4%BC%B0%E8%AE%A1/" style="font-size: 10px;">最大似然估计</a> <a href="/tags/%E6%9C%80%E5%A4%A7%E5%90%8E%E9%AA%8C%E4%BC%B0%E8%AE%A1/" style="font-size: 10px;">最大后验估计</a> <a href="/tags/%E6%9C%80%E5%B0%8F%E4%BA%8C%E4%B9%98/" style="font-size: 13.33px;">最小二乘</a> <a href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA/" style="font-size: 10px;">机器人</a> <a href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA%E5%AE%9A%E4%BD%8D/" style="font-size: 13.33px;">机器人定位</a> <a href="/tags/%E6%A2%AF%E5%BA%A6/" style="font-size: 11.67px;">梯度</a> <a href="/tags/%E6%A2%AF%E5%BA%A6%E4%B8%8B%E9%99%8D/" style="font-size: 10px;">梯度下降</a> <a href="/tags/%E6%AE%8B%E5%B7%AE/" style="font-size: 10px;">残差</a> <a href="/tags/%E6%B3%B0%E5%8B%92%E5%B1%95%E5%BC%80/" style="font-size: 13.33px;">泰勒展开</a> <a href="/tags/%E6%BF%80%E5%85%89%E6%83%AF%E6%80%A7%E9%87%8C%E7%A8%8B%E8%AE%A1/" style="font-size: 10px;">激光惯性里程计</a> <a href="/tags/%E7%89%9B%E9%A1%BF%E6%B3%95/" style="font-size: 11.67px;">牛顿法</a> <a href="/tags/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/" style="font-size: 18.33px;">状态估计</a> <a href="/tags/%E7%B2%92%E5%AD%90%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">粒子滤波</a> <a href="/tags/%E7%BA%BF%E6%80%A7%E5%8C%96/" style="font-size: 10px;">线性化</a> <a href="/tags/%E8%AF%AF%E5%B7%AE%E7%8A%B6%E6%80%81%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">误差状态卡尔曼滤波</a> <a href="/tags/%E8%BF%AD%E4%BB%A3%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">迭代扩展卡尔曼滤波</a> <a href="/tags/%E9%9B%85%E5%8F%AF%E6%AF%94/" style="font-size: 10px;">雅可比</a> <a href="/tags/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/" style="font-size: 15px;">非线性优化</a> <a href="/tags/%E9%AB%98%E6%96%AF%E5%88%86%E5%B8%83/" style="font-size: 10px;">高斯分布</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">归档</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/08/">八月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/07/">七月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/06/">六月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/05/">五月 2026</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/08/05/taylor-linearization-jacobian-slam-iteration/">泰勒展开、线性化与雅可比：非线性问题为什么要反复求解？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/08/03/least-squares-mle-map-robot-state-estimation/">最小二乘、最大似然与最大后验：为什么残差平方能够估计机器人状态？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/08/01/slam-state-observation-prediction-residual-cost-function/">状态、观测、预测、残差与代价函数：SLAM 优化问题是怎么构造出来的？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/07/29/why-robots-need-nonlinear-optimization/">机器人为什么离不开非线性优化？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/07/28/ukf-ckf-particle-filter-overview/">除了 EKF，还有哪些滤波方法？UKF、CKF、粒子滤波简单聊聊</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 Tomato<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>

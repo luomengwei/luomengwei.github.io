@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>ESKF 误差状态卡尔曼滤波：我不直接估计你在哪，我估计你错了多少 | Tomato&#39;s Blog</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="从 EKF 走到 ESKF，理解名义状态、误差状态、姿态误差注入，以及为什么 ESKF 更适合 IMU、VIO 和 LiDAR-IMU 系统。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="ESKF 误差状态卡尔曼滤波：我不直接估计你在哪，我估计你错了多少">
+<meta property="og:url" content="https://luomengwei.github.io/2026/06/05/eskf-error-state-kalman-filter/index.html">
+<meta property="og:site_name" content="Tomato&#39;s Blog">
+<meta property="og:description" content="从 EKF 走到 ESKF，理解名义状态、误差状态、姿态误差注入，以及为什么 ESKF 更适合 IMU、VIO 和 LiDAR-IMU 系统。">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://luomengwei.github.io/images/eskf/position-vs-attitude-update.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/eskf/nominal-error-state-relation.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/eskf/eskf-workflow.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/eskf/ekf-vs-eskf-update.png">
+<meta property="og:image" content="https://luomengwei.github.io/images/eskf/error-injection-methods.png">
+<meta property="article:published_time" content="2026-06-04T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-06-06T03:31:40.244Z">
+<meta property="article:author" content="Tomato">
+<meta property="article:tag" content="ESKF">
+<meta property="article:tag" content="SLAM">
+<meta property="article:tag" content="卡尔曼滤波">
+<meta property="article:tag" content="状态估计">
+<meta property="article:tag" content="误差状态卡尔曼滤波">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://luomengwei.github.io/images/eskf/position-vs-attitude-update.png">
+  
+    <link rel="alternate" href="/atom.xml" title="Tomato's Blog" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
+
+<!-- hexo injector head_end start --><link rel="stylesheet" href="/css/custom.css"><!-- hexo injector head_end end --><meta name="generator" content="Hexo 8.1.2"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Tomato&#39;s Blog</a>
+      </h1>
+      
+        <h2 id="subtitle-wrap">
+          <a href="/" id="subtitle">Robotics, SLAM and LiDAR-IMU Notes</a>
+        </h2>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS 订阅"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="搜索"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜索"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://luomengwei.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-eskf-error-state-kalman-filter" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/06/05/eskf-error-state-kalman-filter/" class="article-date">
+  <time class="dt-published" datetime="2026-06-04T16:00:00.000Z" itemprop="datePublished">2026-06-05</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/SLAM/">SLAM</a>►<a class="article-category-link" href="/categories/SLAM/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/">状态估计</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      ESKF 误差状态卡尔曼滤波：我不直接估计你在哪，我估计你错了多少
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>这篇笔记从 EKF 继续往前，整理 ESKF 的核心直觉：先估计小误差，再把误差注入名义状态。</p>
+<span id="more"></span>
+
+<p>上一篇笔记里，我们讲了 EKF，也就是扩展卡尔曼滤波。</p>
+<p>EKF 解决了标准 KF 的一个大问题：</p>
+<blockquote>
+<p>标准 KF 适合线性系统，但真实机器人系统经常是非线性的。</p>
+</blockquote>
+<p>于是 EKF 的思路是：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">状态预测用非线性函数 f</span><br><span class="line">观测预测用非线性函数 h</span><br><span class="line">再用雅可比矩阵做局部线性化</span><br></pre></td></tr></table></figure>
+
+<p>听起来已经挺合理了。</p>
+<p>但是在机器人状态估计里，还有一个更麻烦的问题：</p>
+<blockquote>
+<p>机器人的姿态不是普通向量。</p>
+</blockquote>
+<p>位置可以加，速度可以加，bias 也可以加。<br>但是旋转姿态不能像普通数字那样直接相加。</p>
+<p>如果你强行把旋转矩阵当普通矩阵加来加去，系统可能不会立刻报错，但数学上已经开始有点“不讲武德”了。</p>
+<p>所以，在视觉惯性、激光惯性、IMU 融合这些系统里，经常会看到一种更适合处理姿态和 IMU 的滤波形式：</p>
+<blockquote>
+<p><strong>ESKF，Error-State Kalman Filter，误差状态卡尔曼滤波。</strong></p>
+</blockquote>
+<p>它的核心思想也可以用一句话概括：</p>
+<blockquote>
+<p><strong>我不直接估计你在哪，我估计你错了多少。</strong></p>
+</blockquote>
+<style>
+.eskf-note-figure {
+  margin: 1.45em auto 1.55em;
+  text-align: center;
+}
+
+.eskf-note-figure img {
+  display: block;
+  width: 76%;
+  max-width: 900px;
+  height: auto;
+  margin: 0 auto;
+  border-radius: 0;
+}
+
+.eskf-note-figure-wide img {
+  width: 82%;
+  max-width: 980px;
+}
+
+.eskf-note-figure figcaption {
+  display: none;
+}
+
+.eskf-formula-note {
+  margin: 1.15em -20px 1.35em;
+  padding: 1.15em 1.6em;
+  color: #f5f5f5;
+  background: #282828;
+  line-height: 1.8;
+}
+
+.eskf-formula-note p {
+  margin: 0.2em 0;
+}
+
+.eskf-formula-note .math-inline {
+  color: #fff;
+}
+
+@media (max-width: 720px) {
+  .eskf-note-figure img,
+  .eskf-note-figure-wide img {
+    width: 100%;
+  }
+}
+</style>
+
+
+<hr>
+<h2 id="1-为什么从-EKF-走到-ESKF？"><a href="#1-为什么从-EKF-走到-ESKF？" class="headerlink" title="1. 为什么从 EKF 走到 ESKF？"></a>1. 为什么从 EKF 走到 ESKF？</h2><p>先回忆一下 EKF 的思路。</p>
+<p>EKF 直接维护一个状态：</p>
+<div class="math-display">\[x\]</div>
+<p>然后做预测、观测、更新。</p>
+<p>在简单问题里，这没什么问题。<br>比如一维小车状态是：</p>
+<div class="math-display">\[x =
+\begin{bmatrix}
+p \\
+v
+\end{bmatrix}\]</div>
+<p>位置 <span class="math-inline">\(p\)</span> 和速度 <span class="math-inline">\(v\)</span> 都是普通数字，更新时直接加修正量就可以：</p>
+<div class="math-display">\[p' = p + \Delta p\]</div>
+<div class="math-display">\[v' = v + \Delta v\]</div>
+<p>这个非常自然。</p>
+<p>但机器人状态里经常会包含姿态。</p>
+<p>比如三维机器人状态可能是：</p>
+<div class="math-display">\[x =
+\begin{bmatrix}
+R \\
+p \\
+v \\
+b_g \\
+b_a
+\end{bmatrix}\]</div>
+<p>其中：</p>
+<div class="eskf-formula-note">
+  <p><span class="math-inline">\(R\)</span>：姿态</p>
+  <p><span class="math-inline">\(p\)</span>：位置</p>
+  <p><span class="math-inline">\(v\)</span>：速度</p>
+  <p><span class="math-inline">\(b_g\)</span>：陀螺仪零偏</p>
+  <p><span class="math-inline">\(b_a\)</span>：加速度计零偏</p>
+</div>
+
+<p>这里的 <span class="math-inline">\(p\)</span>、<span class="math-inline">\(v\)</span>、<span class="math-inline">\(b_g\)</span>、<span class="math-inline">\(b_a\)</span> 都还比较像普通向量。<br>但是 <span class="math-inline">\(R\)</span> 不一样。</p>
+<p><span class="math-inline">\(R\)</span> 是旋转矩阵，属于 <span class="math-inline">\(SO(3)\)</span>。<br>它不是随便一个 3×3 矩阵，而是必须满足旋转矩阵的约束。</p>
+<p>所以不能简单写：</p>
+<div class="math-display">\[R' = R + \Delta R\]</div>
+<p>这就像你有一张地图，地图可以平移，可以旋转，但你不能随便把两张地图的像素值相加，然后说“新的方向出来了”。</p>
+<p>数学会沉默，程序会运行，但结果可能会慢慢变得奇怪。</p>
+<hr>
+<h2 id="2-姿态为什么不能直接相加？"><a href="#2-姿态为什么不能直接相加？" class="headerlink" title="2. 姿态为什么不能直接相加？"></a>2. 姿态为什么不能直接相加？</h2><p>位置很好理解。</p>
+<p>机器人位置是：</p>
+<div class="math-display">\[p = [1, 2, 0]^T\]</div>
+<p>如果位置误差是：</p>
+<div class="math-display">\[\Delta p = [0.1, -0.2, 0]^T\]</div>
+<p>那么修正后就是：</p>
+<div class="math-display">\[p' = p + \Delta p\]</div>
+<p>也就是：</p>
+<div class="math-display">\[p' = [1.1, 1.8, 0]^T\]</div>
+<p>没什么问题。</p>
+<p>但是姿态不同。</p>
+<p>姿态本质上描述的是“坐标系怎么转”。<br>在三维空间里，姿态通常用旋转矩阵、四元数或者李群来表示。</p>
+<p>它们都有自己的约束。</p>
+<p>比如旋转矩阵 <span class="math-inline">\(R\)</span> 必须满足：</p>
+<div class="math-display">\[R^T R = I\]</div>
+<div class="math-display">\[\det(R) = 1\]</div>
+<p>如果你直接做矩阵加法：</p>
+<div class="math-display">\[R' = R + \Delta R\]</div>
+<p>新的 <span class="math-inline">\(R'\)</span> 很可能就不再是合法的旋转矩阵了。</p>
+<p>所以更合理的做法是：</p>
+<blockquote>
+<p>用一个很小的旋转误差去“扰动”当前姿态。</p>
+</blockquote>
+<p>常见形式是：</p>
+<div class="math-display">\[R_{true} = R \cdot \operatorname{Exp}(\delta \theta)\]</div>
+<p>这里：</p>
+<div class="eskf-formula-note">
+  <p><span class="math-inline">\(R\)</span>：当前估计的姿态，也叫名义姿态</p>
+  <p><span class="math-inline">\(\delta \theta\)</span>：很小的姿态误差</p>
+  <p><span class="math-inline">\(\operatorname{Exp}(\delta \theta)\)</span>：把小角度误差映射成旋转</p>
+</div>
+
+<p>这句话先不用完全吃透。</p>
+<p>你可以先理解成：</p>
+<blockquote>
+<p>姿态不能直接加一个大旋转矩阵，但可以用一个很小的旋转误差去修正当前姿态。</p>
+</blockquote>
+<p>这就是 ESKF 要做的基础。</p>
+<hr>
+<p>这两种更新方式放在一起看，会更直观，如图 1 所示。</p>
+<figure class="eskf-note-figure">
+  <img src="/images/eskf/position-vs-attitude-update.png" alt="">
+</figure>
+
+<p>图 1 想表达的核心很简单：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">位置：像普通数字一样修正</span><br><span class="line">姿态：要尊重旋转本身的几何结构</span><br></pre></td></tr></table></figure>
+
+<p>这也是 ESKF 比普通 EKF 更适合 IMU 和机器人姿态估计的原因之一。</p>
+<hr>
+<h2 id="3-ESKF-的核心：名义状态-误差状态"><a href="#3-ESKF-的核心：名义状态-误差状态" class="headerlink" title="3. ESKF 的核心：名义状态 + 误差状态"></a>3. ESKF 的核心：名义状态 + 误差状态</h2><p>ESKF 的名字里有一个关键词：</p>
+<blockquote>
+<p>Error-State，误差状态。</p>
+</blockquote>
+<p>它不直接把滤波器的主要任务放在完整状态上，而是把状态拆成两部分：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">名义状态</span><br><span class="line">误差状态</span><br></pre></td></tr></table></figure>
+
+<p>可以写成：</p>
+<div class="math-display">\[x_{true} = x \boxplus \delta x\]</div>
+<p>这里：</p>
+<div class="eskf-formula-note">
+  <p><span class="math-inline">\(x_{true}\)</span>：真实状态，也就是机器人真正的状态</p>
+  <p><span class="math-inline">\(x\)</span>：名义状态，也就是当前估计状态</p>
+  <p><span class="math-inline">\(\delta x\)</span>：误差状态，也就是当前估计错了多少</p>
+  <p><span class="math-inline">\(\boxplus\)</span>：表示把误差注入到名义状态中</p>
+</div>
+
+<p>这句话翻译成人话就是：</p>
+<blockquote>
+<p>真实状态 &#x3D; 当前估计状态 + 当前估计的误差</p>
+</blockquote>
+<p>不过这个“+”不是普通加法。<br>因为位置可以直接加，姿态要用旋转扰动，所以这里通常写成 <span class="math-inline">\(\boxplus\)</span>。</p>
+<hr>
+<h2 id="4-什么是名义状态？"><a href="#4-什么是名义状态？" class="headerlink" title="4. 什么是名义状态？"></a>4. 什么是名义状态？</h2><p>名义状态可以理解为：</p>
+<blockquote>
+<p>系统当前维护的主状态。</p>
+</blockquote>
+<p>比如在 LiDAR-IMU 或 VIO 系统中，名义状态可能包括：</p>
+<div class="math-display">\[x =
+\begin{bmatrix}
+R \\
+p \\
+v \\
+b_g \\
+b_a \\
+g
+\end{bmatrix}\]</div>
+<p>其中：</p>
+<div class="eskf-formula-note">
+  <p><span class="math-inline">\(R\)</span>：姿态</p>
+  <p><span class="math-inline">\(p\)</span>：位置</p>
+  <p><span class="math-inline">\(v\)</span>：速度</p>
+  <p><span class="math-inline">\(b_g\)</span>：陀螺仪零偏</p>
+  <p><span class="math-inline">\(b_a\)</span>：加速度计零偏</p>
+  <p><span class="math-inline">\(g\)</span>：重力方向</p>
+</div>
+
+<p>名义状态是系统真正拿来做预测、坐标变换、点云去畸变、图像投影的状态。</p>
+<p>比如：</p>
+<div class="eskf-formula-note">
+  <p>用 <span class="math-inline">\(R\)</span> 和 <span class="math-inline">\(p\)</span> 把点云变换到地图坐标系</p>
+  <p>用 <span class="math-inline">\(v\)</span> 预测机器人下一时刻位置</p>
+  <p>用 <span class="math-inline">\(b_g\)</span> 和 <span class="math-inline">\(b_a\)</span> 修正 IMU 测量</p>
+</div>
+
+<p>所以名义状态就像机器人当前的“官方说法”：</p>
+<blockquote>
+<p>我现在大概在这里，姿态大概是这样，速度大概是这样。</p>
+</blockquote>
+<p>但这个官方说法不一定完全正确。</p>
+<p>所以还需要误差状态。</p>
+<hr>
+<h2 id="5-什么是误差状态？"><a href="#5-什么是误差状态？" class="headerlink" title="5. 什么是误差状态？"></a>5. 什么是误差状态？</h2><p>误差状态描述的是：</p>
+<blockquote>
+<p>名义状态和真实状态之间差了多少。</p>
+</blockquote>
+<p>常见误差状态可以写成：</p>
+<div class="math-display">\[\delta x =
+\begin{bmatrix}
+\delta \theta \\
+\delta p \\
+\delta v \\
+\delta b_g \\
+\delta b_a \\
+\delta g
+\end{bmatrix}\]</div>
+<p>其中：</p>
+<div class="eskf-formula-note">
+  <p><span class="math-inline">\(\delta \theta\)</span>：姿态误差</p>
+  <p><span class="math-inline">\(\delta p\)</span>：位置误差</p>
+  <p><span class="math-inline">\(\delta v\)</span>：速度误差</p>
+  <p><span class="math-inline">\(\delta b_g\)</span>：陀螺仪零偏误差</p>
+  <p><span class="math-inline">\(\delta b_a\)</span>：加速度计零偏误差</p>
+  <p><span class="math-inline">\(\delta g\)</span>：重力误差</p>
+</div>
+
+<p>注意这里的姿态误差不是一个完整旋转矩阵，而是一个小角度向量：</p>
+<div class="math-display">\[\delta \theta\]</div>
+<p>这就很关键。</p>
+<p>因为滤波器更新的是一个“小误差”，而不是直接在完整姿态上乱加。</p>
+<p>比如系统预测：</p>
+<div class="eskf-formula-note">
+  <p>我觉得机器人现在的位置是 <span class="math-inline">\(p = [10.0,\ 2.0,\ 0.0]\)</span></p>
+</div>
+
+<p>观测修正后发现：</p>
+<div class="eskf-formula-note">
+  <p>位置误差大概是 <span class="math-inline">\(\delta p = [-0.05,\ 0.03,\ 0.0]\)</span></p>
+</div>
+
+<p>那么注入后：</p>
+<div class="eskf-formula-note">
+  <p>修正后位置是 <span class="math-inline">\(p = [9.95,\ 2.03,\ 0.0]\)</span></p>
+</div>
+
+<p>对于姿态，系统可能发现：</p>
+<div class="eskf-formula-note">
+  <p>姿态误差大概是 <span class="math-inline">\(\delta \theta = [0.001,\ -0.002,\ 0.003]\)</span></p>
+</div>
+
+<p>那么它不是把某个旋转矩阵直接加上去，而是通过：</p>
+<div class="math-display">\[R_{new} = R \cdot \operatorname{Exp}(\delta \theta)\]</div>
+<p>去修正姿态。</p>
+<p>这就是误差状态的意义。</p>
+<hr>
+<p>把这件事画成结构图，就是图 2 里的关系：名义状态负责表达当前估计，误差状态负责表达当前估计还差多少。</p>
+<figure class="eskf-note-figure">
+  <img src="/images/eskf/nominal-error-state-relation.png" alt="">
+</figure>
+
+<p>图 2 可以帮助我们抓住 ESKF 的核心：</p>
+<blockquote>
+<p>滤波器不是直接到处修改完整状态，而是先估计误差，再把误差注入到名义状态中。</p>
+</blockquote>
+<p>这个设计看起来多绕了一步，但对于带姿态和 IMU 的系统来说非常有用。</p>
+<hr>
+<h2 id="6-ESKF-的工作流程"><a href="#6-ESKF-的工作流程" class="headerlink" title="6. ESKF 的工作流程"></a>6. ESKF 的工作流程</h2><p>ESKF 的整体流程可以概括成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">1. 用 IMU 或运动模型传播名义状态</span><br><span class="line">2. 同时传播误差状态协方差</span><br><span class="line">3. 传感器观测来了以后，构建残差</span><br><span class="line">4. 通过卡尔曼更新求出误差状态</span><br><span class="line">5. 把误差状态注入名义状态</span><br><span class="line">6. 重置误差状态</span><br></pre></td></tr></table></figure>
+
+<p>注意第 6 步：</p>
+<blockquote>
+<p>误差注入之后，误差状态通常要重置为零。</p>
+</blockquote>
+<p>为什么？</p>
+<p>因为误差已经被吸收到名义状态里了。</p>
+<p>比如原来：</p>
+<div class="eskf-formula-note">
+  <p>名义位置：<span class="math-inline">\(p = 10.0\)</span></p>
+  <p>位置误差：<span class="math-inline">\(\delta p = -0.05\)</span></p>
+</div>
+
+<p>注入以后：</p>
+<div class="eskf-formula-note">
+  <p>修正后位置：<span class="math-inline">\(p = 9.95\)</span></p>
+</div>
+
+<p>这个时候误差已经修正进名义状态了，所以误差状态就回到：</p>
+<div class="eskf-formula-note">
+  <p>位置误差重置：<span class="math-inline">\(\delta p = 0\)</span></p>
+</div>
+
+<p>可以理解为：</p>
+<blockquote>
+<p>错误已经改进作业里了，错题本暂时清空。</p>
+</blockquote>
+<p>当然，协方差不会随便清空，它仍然要继续维护系统的不确定性。</p>
+<hr>
+<p>把上面的步骤串成一轮循环，就是图 3 所示的 ESKF 基本流程。</p>
+<figure class="eskf-note-figure eskf-note-figure-wide">
+  <img src="/images/eskf/eskf-workflow.png" alt="">
+</figure>
+
+<p>图 3 和前面 EKF 的流程有点像，但重点不同。</p>
+<p>EKF 更像是：</p>
+<blockquote>
+<p>直接更新完整状态。</p>
+</blockquote>
+<p>ESKF 更像是：</p>
+<blockquote>
+<p>先更新误差状态，再把误差注入完整状态。</p>
+</blockquote>
+<p>这就是它名字里 Error-State 的含义。</p>
+<hr>
+<h2 id="7-为什么-ESKF-特别适合-IMU？"><a href="#7-为什么-ESKF-特别适合-IMU？" class="headerlink" title="7. 为什么 ESKF 特别适合 IMU？"></a>7. 为什么 ESKF 特别适合 IMU？</h2><p>ESKF 在 IMU 融合中非常常见。</p>
+<p>原因主要有三个。</p>
+<hr>
+<h3 id="7-1-IMU-适合传播名义状态"><a href="#7-1-IMU-适合传播名义状态" class="headerlink" title="7.1 IMU 适合传播名义状态"></a>7.1 IMU 适合传播名义状态</h3><p>IMU 可以测量角速度和加速度。</p>
+<p>经过积分之后，可以用来预测：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">姿态</span><br><span class="line">速度</span><br><span class="line">位置</span><br></pre></td></tr></table></figure>
+
+<p>也就是说，IMU 很适合做高频状态传播。</p>
+<p>在两帧 LiDAR 或两帧图像之间，IMU 可以不断预测机器人状态。</p>
+<p>这部分通常作用在名义状态上。</p>
+<hr>
+<h3 id="7-2-IMU-误差通常比较小，适合误差状态建模"><a href="#7-2-IMU-误差通常比较小，适合误差状态建模" class="headerlink" title="7.2 IMU 误差通常比较小，适合误差状态建模"></a>7.2 IMU 误差通常比较小，适合误差状态建模</h3><p>在短时间内，IMU 预测的误差通常可以看成小扰动。</p>
+<p>比如姿态误差 <span class="math-inline">\(\delta \theta\)</span>、速度误差 <span class="math-inline">\(\delta v\)</span>、bias 误差 <span class="math-inline">\(\delta b_g\)</span>、<span class="math-inline">\(\delta b_a\)</span> 都可以用线性误差模型近似。</p>
+<p>这正好适合 ESKF。</p>
+<p>换句话说：</p>
+<blockquote>
+<p>名义状态可以是非线性的，误差状态在局部可以近似线性。</p>
+</blockquote>
+<p>这句话非常关键。</p>
+<p>ESKF 并不是说机器人系统本身变简单了。<br>它只是把复杂的状态拆开，把主要非线性留在名义状态里，把滤波器更新放在小误差空间里处理。</p>
+<hr>
+<h3 id="7-3-姿态误差可以用小角度表示"><a href="#7-3-姿态误差可以用小角度表示" class="headerlink" title="7.3 姿态误差可以用小角度表示"></a>7.3 姿态误差可以用小角度表示</h3><p>IMU 系统里最麻烦的就是姿态。</p>
+<p>ESKF 用 <span class="math-inline">\(\delta \theta\)</span> 表示小角度姿态误差，这样就避免了直接对旋转矩阵或四元数做普通加法。</p>
+<p>所以在 IMU 系统里，ESKF 比普通 EKF 更自然。</p>
+<hr>
+<h2 id="8-用一个“闭眼走路”的例子理解-ESKF"><a href="#8-用一个“闭眼走路”的例子理解-ESKF" class="headerlink" title="8. 用一个“闭眼走路”的例子理解 ESKF"></a>8. 用一个“闭眼走路”的例子理解 ESKF</h2><p>我们还是用一个生活例子。</p>
+<p>假设你闭着眼往前走。</p>
+<p>你的大脑根据身体感觉预测：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">我大概往前走了 1 米，向右偏了 2 度。</span><br></pre></td></tr></table></figure>
+
+<p>这个就是名义状态。</p>
+<p>但是你知道自己可能走偏了。<br>于是你心里保留一个误差判断：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">我可能实际少走了 5 厘米，方向可能又偏了 0.5 度。</span><br></pre></td></tr></table></figure>
+
+<p>这个就是误差状态。</p>
+<p>后来你睁眼看到墙，发现确实有点偏。<br>于是你把这个误差修正到自己的判断里：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">好，那我把位置往左修一点，把方向也修一点。</span><br></pre></td></tr></table></figure>
+
+<p>修完以后，你新的“当前判断”就更新了。</p>
+<p>然后你不再一直背着刚才那个误差，而是重新开始估计新的误差。</p>
+<p>这就是 ESKF 的直觉：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">名义状态负责描述当前估计</span><br><span class="line">误差状态负责描述当前估计错了多少</span><br><span class="line">观测来了以后先估计误差</span><br><span class="line">再把误差修正到名义状态里</span><br></pre></td></tr></table></figure>
+
+<hr>
+<h2 id="9-ESKF-和-EKF-的区别"><a href="#9-ESKF-和-EKF-的区别" class="headerlink" title="9. ESKF 和 EKF 的区别"></a>9. ESKF 和 EKF 的区别</h2><p>ESKF 和 EKF 并不是完全不同的两套世界观。<br>它们都是卡尔曼滤波框架下的非线性状态估计方法。</p>
+<p>区别主要在“更新谁”。</p>
+<p>EKF 通常可以理解成：</p>
+<blockquote>
+<p>直接对完整状态进行预测和更新。</p>
+</blockquote>
+<p>ESKF 则是：</p>
+<blockquote>
+<p>名义状态单独传播，滤波器主要估计误差状态。</p>
+</blockquote>
+<p>可以用下面这张表来对比：</p>
+<table>
+<thead>
+<tr>
+<th>对比项</th>
+<th>EKF</th>
+<th>ESKF</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>状态表示</td>
+<td>直接维护完整状态</td>
+<td>名义状态 + 误差状态</td>
+</tr>
+<tr>
+<td>滤波更新对象</td>
+<td>完整状态</td>
+<td>误差状态</td>
+</tr>
+<tr>
+<td>姿态处理</td>
+<td>容易遇到流形问题</td>
+<td>用小角度误差扰动姿态</td>
+</tr>
+<tr>
+<td>适合场景</td>
+<td>一般非线性系统</td>
+<td>IMU、VIO、LIO、机器人姿态估计</td>
+</tr>
+<tr>
+<td>更新后处理</td>
+<td>更新完整状态</td>
+<td>误差注入后重置误差状态</td>
+</tr>
+<tr>
+<td>核心思想</td>
+<td>对非线性模型局部线性化</td>
+<td>估计“当前估计错了多少”</td>
+</tr>
+</tbody></table>
+<p>一句话总结：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">EKF：我直接修正状态</span><br><span class="line">ESKF：我先估计误差，再把误差注入状态</span><br></pre></td></tr></table></figure>
+
+<hr>
+<p>为了避免把两者混在一起，可以看图 4：它把 EKF 和 ESKF 在“更新对象”上的差别放在了一起。</p>
+<figure class="eskf-note-figure eskf-note-figure-wide">
+  <img src="/images/eskf/ekf-vs-eskf-update.png" alt="">
+</figure>
+
+<p>这张图可以帮助我们记住 ESKF 的特点：</p>
+<blockquote>
+<p>它不否定 EKF，而是用更适合机器人姿态和 IMU 的方式组织状态更新。</p>
+</blockquote>
+<hr>
+<h2 id="10-ESKF-在-LiDAR-IMU-系统里做什么？"><a href="#10-ESKF-在-LiDAR-IMU-系统里做什么？" class="headerlink" title="10. ESKF 在 LiDAR-IMU 系统里做什么？"></a>10. ESKF 在 LiDAR-IMU 系统里做什么？</h2><p>在 LiDAR-IMU 系统中，ESKF 的角色非常典型。</p>
+<p>以一个简化流程来看：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">IMU 高频传播名义状态</span><br><span class="line">LiDAR 提供几何观测残差</span><br><span class="line">滤波器根据残差估计误差状态</span><br><span class="line">误差状态注入名义状态</span><br><span class="line">更新后的状态继续用于点云配准和地图更新</span><br></pre></td></tr></table></figure>
+
+<p>比如系统用 IMU 预测当前位姿：</p>
+<div class="eskf-formula-note">
+  <p><span class="math-inline">\(R,\ p,\ v,\ b_g,\ b_a\)</span></p>
+</div>
+
+<p>然后 LiDAR 当前帧点云和地图匹配，发现：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">点到地图平面的距离残差比较大</span><br></pre></td></tr></table></figure>
+
+<p>这说明当前预测位姿可能有误差。</p>
+<p>滤波器不会简单说：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">那我直接把完整状态硬改掉。</span><br></pre></td></tr></table></figure>
+
+<p>而是估计：</p>
+<div class="eskf-formula-note">
+  <p><span class="math-inline">\(\delta \theta\)</span>：姿态应该修多少</p>
+  <p><span class="math-inline">\(\delta p\)</span>：位置应该修多少</p>
+  <p><span class="math-inline">\(\delta v\)</span>：速度应该修多少</p>
+  <p><span class="math-inline">\(\delta b_g\)</span>、<span class="math-inline">\(\delta b_a\)</span>：bias 应该修多少</p>
+</div>
+
+<p>然后把这些误差注入名义状态。</p>
+<p>这就是为什么在 FAST-LIO、FAST-LIO2 这类 LiDAR-IMU 系统里，会经常看到误差状态、迭代更新、状态注入这些概念。</p>
+<p>不过 FAST-LIO2 里还不只是 ESKF，它还用了“迭代”的思想。<br>这个我们下一篇再讲。</p>
+<hr>
+<h2 id="11-ESKF-的状态注入怎么理解？"><a href="#11-ESKF-的状态注入怎么理解？" class="headerlink" title="11. ESKF 的状态注入怎么理解？"></a>11. ESKF 的状态注入怎么理解？</h2><p>状态注入是 ESKF 里很重要的一步。</p>
+<p>可以分开看。</p>
+<h3 id="11-1-位置注入"><a href="#11-1-位置注入" class="headerlink" title="11.1 位置注入"></a>11.1 位置注入</h3><p>位置是普通向量：</p>
+<div class="math-display">\[p \leftarrow p + \delta p\]</div>
+<p>这个很简单。</p>
+<hr>
+<h3 id="11-2-速度注入"><a href="#11-2-速度注入" class="headerlink" title="11.2 速度注入"></a>11.2 速度注入</h3><p>速度也是普通向量：</p>
+<div class="math-display">\[v \leftarrow v + \delta v\]</div>
+<p>也很直接。</p>
+<hr>
+<h3 id="11-3-bias-注入"><a href="#11-3-bias-注入" class="headerlink" title="11.3 bias 注入"></a>11.3 bias 注入</h3><p>IMU bias 也可以直接加：</p>
+<div class="math-display">\[b_g \leftarrow b_g + \delta b_g\]</div>
+<div class="math-display">\[b_a \leftarrow b_a + \delta b_a\]</div>
+<hr>
+<h3 id="11-4-姿态注入"><a href="#11-4-姿态注入" class="headerlink" title="11.4 姿态注入"></a>11.4 姿态注入</h3><p>姿态要特殊处理：</p>
+<div class="math-display">\[R \leftarrow R \cdot \operatorname{Exp}(\delta \theta)\]</div>
+<p>或者根据不同定义，也可能写成左扰动形式：</p>
+<div class="math-display">\[R \leftarrow \operatorname{Exp}(\delta \theta) \cdot R\]</div>
+<p>具体用左扰动还是右扰动，取决于系统误差定义。</p>
+<p>初学阶段先不用纠结左乘还是右乘。<br>最重要的是理解：</p>
+<blockquote>
+<p>姿态不是直接加，而是用小角度误差通过指数映射注入。</p>
+</blockquote>
+<p>这句话比公式更重要。</p>
+<hr>
+<p>这样一来，不同状态量的注入方式就可以统一成图 5 这张图来理解。</p>
+<figure class="eskf-note-figure eskf-note-figure-wide">
+  <img src="/images/eskf/error-injection-methods.png" alt="">
+</figure>
+
+<p>图 5 的重点是：</p>
+<div class="eskf-formula-note">
+  <p>普通向量：直接加误差</p>
+  <p>姿态变量：用 <span class="math-inline">\(\operatorname{Exp}(\delta \theta)\)</span> 注入</p>
+</div>
+
+<p>这正是 ESKF 和机器人姿态估计关系密切的原因。</p>
+<hr>
+<h2 id="12-ESKF-的优点"><a href="#12-ESKF-的优点" class="headerlink" title="12. ESKF 的优点"></a>12. ESKF 的优点</h2><p>ESKF 被广泛用于机器人状态估计，不是因为名字高级，而是因为它确实适合这类问题。</p>
+<p>主要优点包括：</p>
+<h3 id="12-1-适合处理姿态"><a href="#12-1-适合处理姿态" class="headerlink" title="12.1 适合处理姿态"></a>12.1 适合处理姿态</h3><p>姿态在 <span class="math-inline">\(SO(3)\)</span> 上，不适合直接用普通向量加法更新。<br>ESKF 用小角度误差处理姿态更新，更符合旋转的几何结构。</p>
+<hr>
+<h3 id="12-2-适合-IMU-高频传播"><a href="#12-2-适合-IMU-高频传播" class="headerlink" title="12.2 适合 IMU 高频传播"></a>12.2 适合 IMU 高频传播</h3><p>IMU 可以高频传播名义状态，而误差状态协方差可以在线性误差模型中传播。</p>
+<p>这种结构非常适合惯性导航、VIO、LIO。</p>
+<hr>
+<h3 id="12-3-误差通常较小，线性化更合理"><a href="#12-3-误差通常较小，线性化更合理" class="headerlink" title="12.3 误差通常较小，线性化更合理"></a>12.3 误差通常较小，线性化更合理</h3><p>ESKF 的滤波对象是小误差。</p>
+<p>相对于完整状态，小误差更容易满足局部线性化假设。</p>
+<p>这也是 ESKF 在工程上比较稳的一个原因。</p>
+<hr>
+<h3 id="12-4-状态表达更清晰"><a href="#12-4-状态表达更清晰" class="headerlink" title="12.4 状态表达更清晰"></a>12.4 状态表达更清晰</h3><p>ESKF 明确区分了：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">我现在估计的状态</span><br><span class="line">我估计错了多少</span><br></pre></td></tr></table></figure>
+
+<p>这个结构对理解系统调试也很有帮助。</p>
+<p>比如轨迹漂了，你可以思考：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">是名义状态传播错了？</span><br><span class="line">还是误差状态没有被观测有效修正？</span><br><span class="line">还是协方差和噪声设置不合理？</span><br></pre></td></tr></table></figure>
+
+<p>比起所有东西混在一个完整状态里，ESKF 的分工更清楚。</p>
+<hr>
+<h2 id="13-ESKF-不是万能的"><a href="#13-ESKF-不是万能的" class="headerlink" title="13. ESKF 不是万能的"></a>13. ESKF 不是万能的</h2><p>当然，ESKF 也不是魔法。</p>
+<p>它仍然依赖：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">合理的 IMU 噪声模型</span><br><span class="line">合理的 bias 建模</span><br><span class="line">合理的观测残差</span><br><span class="line">正确的雅可比</span><br><span class="line">正确的状态注入方式</span><br></pre></td></tr></table></figure>
+
+<p>如果 IMU 标定很差、时间同步不准、外参错误、观测退化严重，那么 ESKF 也救不了一切。</p>
+<p>它最多能说：</p>
+<blockquote>
+<p>我已经按规则融合了，但你给我的信息确实有点难办。</p>
+</blockquote>
+<p>所以滤波器再高级，也绕不开工程系统里的基础问题：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">传感器质量</span><br><span class="line">时间同步</span><br><span class="line">外参标定</span><br><span class="line">噪声参数</span><br><span class="line">观测约束</span><br><span class="line">数据质量</span><br></pre></td></tr></table></figure>
+
+<p>这些才是状态估计能不能稳定工作的底层条件。</p>
+<hr>
+<h2 id="14-和前几篇的关系"><a href="#14-和前几篇的关系" class="headerlink" title="14. 和前几篇的关系"></a>14. 和前几篇的关系</h2><p>到这里，我们已经从 KF 走到了 ESKF。</p>
+<p>可以把这条路线整理一下：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">KF：</span><br><span class="line">线性系统里的预测 + 修正</span><br><span class="line"></span><br><span class="line">EKF：</span><br><span class="line">非线性系统里，使用局部线性化继续做预测 + 修正</span><br><span class="line"></span><br><span class="line">ESKF：</span><br><span class="line">把状态拆成名义状态和误差状态，主要估计“当前估计错了多少”</span><br></pre></td></tr></table></figure>
+
+<p>它们不是互相割裂的。</p>
+<p>更像是随着机器人问题越来越复杂，一步一步演化出来的：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">一维小车：KF 就够了</span><br><span class="line">二维转弯机器人：需要 EKF</span><br><span class="line">三维姿态 + IMU：更适合 ESKF</span><br><span class="line">LiDAR-IMU 迭代更新：进一步走向 IESKF</span><br></pre></td></tr></table></figure>
+
+<p>这也是为什么我们这个系列要一篇一篇往后讲。<br>不是为了背一堆缩写，而是为了看清楚每一步为什么出现。</p>
+<hr>
+<h2 id="15-小结"><a href="#15-小结" class="headerlink" title="15. 小结"></a>15. 小结</h2><p>这一篇我们学习了 ESKF，误差状态卡尔曼滤波。</p>
+<p>核心内容可以总结成：</p>
+<ol>
+<li>普通 EKF 直接维护完整状态；</li>
+<li>机器人状态里包含姿态，而姿态不是普通向量；</li>
+<li>旋转不能简单地像位置一样直接相加；</li>
+<li>ESKF 把状态拆成名义状态和误差状态；</li>
+<li>名义状态表示当前估计；</li>
+<li>误差状态表示当前估计错了多少；</li>
+<li>滤波器主要估计误差状态；</li>
+<li>误差估计出来后，会被注入到名义状态中；</li>
+<li>注入后误差状态通常重置为零；</li>
+<li>ESKF 特别适合 IMU、VIO、LIO 等包含姿态和惯性传播的系统。</li>
+</ol>
+<p>用一句话总结：</p>
+<blockquote>
+<p>ESKF 的核心不是直接问“机器人在哪”，而是先问“我当前估计错了多少”，然后再把这个小误差修正回去。</p>
+</blockquote>
+<p>下一篇，我们继续往 FAST-LIO2 方向靠近：</p>
+<blockquote>
+<p>IEKF，迭代扩展卡尔曼滤波。</p>
+</blockquote>
+<p>因为在 LiDAR scan-to-map 这类问题里，观测残差往往比较非线性。<br>有时候只修正一次不够，必须在同一帧观测里反复线性化、反复更新。</p>
+<p>也就是：</p>
+<blockquote>
+<p>一次修不准，那就多修几次。</p>
+</blockquote>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://luomengwei.github.io/2026/06/05/eskf-error-state-kalman-filter/" data-id="cuid7AqNVdMK6gQAL-IJuzx9d" data-title="ESKF 误差状态卡尔曼滤波：我不直接估计你在哪，我估计你错了多少" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/ESKF/" rel="tag">ESKF</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/SLAM/" rel="tag">SLAM</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">卡尔曼滤波</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/" rel="tag">状态估计</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/%E8%AF%AF%E5%B7%AE%E7%8A%B6%E6%80%81%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">误差状态卡尔曼滤波</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2026/06/06/iekf-iterated-extended-kalman-filter/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">前一篇</strong>
+      <div class="article-nav-title">
+        
+          IEKF 迭代扩展卡尔曼滤波：一次修不准，那就多修几次
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2026/06/04/ekf-extended-kalman-filter-nonlinear-world/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">后一篇</strong>
+      <div class="article-nav-title">EKF 扩展卡尔曼滤波：当机器人世界不再是直线</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分类</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM/">SLAM</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/">状态估计</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/">非线性优化</a></li></ul></li><li class="category-list-item"><a class="category-list-link" href="/categories/SLAM%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/">SLAM学习笔记</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%95%B0%E5%AD%A6%E5%9F%BA%E7%A1%80/">数学基础</a><ul class="category-list-child"><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%95%B0%E5%AD%A6%E5%9F%BA%E7%A1%80/%E4%BC%98%E5%8C%96%E6%96%B9%E6%B3%95/">优化方法</a></li></ul></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/CKF/" rel="tag">CKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/EKF/" rel="tag">EKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ESKF/" rel="tag">ESKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/FAST-LIO2/" rel="tag">FAST-LIO2</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Hessian/" rel="tag">Hessian</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IEKF/" rel="tag">IEKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IESKF/" rel="tag">IESKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/Jacobian/" rel="tag">Jacobian</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/KF/" rel="tag">KF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/LiDAR-IMU/" rel="tag">LiDAR-IMU</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SLAM/" rel="tag">SLAM</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/UKF/" rel="tag">UKF</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%BB%A3%E4%BB%B7%E5%87%BD%E6%95%B0/" rel="tag">代价函数</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%BC%98%E5%8C%96/" rel="tag">优化</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" rel="tag">传感器融合</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%8D%8F%E6%96%B9%E5%B7%AE/" rel="tag">协方差</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E5%A4%9A%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" rel="tag">多传感器融合</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">扩展卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%80%E5%A4%A7%E4%BC%BC%E7%84%B6%E4%BC%B0%E8%AE%A1/" rel="tag">最大似然估计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%80%E5%A4%A7%E5%90%8E%E9%AA%8C%E4%BC%B0%E8%AE%A1/" rel="tag">最大后验估计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%80%E5%B0%8F%E4%BA%8C%E4%B9%98/" rel="tag">最小二乘</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA/" rel="tag">机器人</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA%E5%AE%9A%E4%BD%8D/" rel="tag">机器人定位</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%A2%AF%E5%BA%A6/" rel="tag">梯度</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%A2%AF%E5%BA%A6%E4%B8%8B%E9%99%8D/" rel="tag">梯度下降</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%AE%8B%E5%B7%AE/" rel="tag">残差</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%B3%B0%E5%8B%92%E5%B1%95%E5%BC%80/" rel="tag">泰勒展开</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E6%BF%80%E5%85%89%E6%83%AF%E6%80%A7%E9%87%8C%E7%A8%8B%E8%AE%A1/" rel="tag">激光惯性里程计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%89%9B%E9%A1%BF%E6%B3%95/" rel="tag">牛顿法</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/" rel="tag">状态估计</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%B2%92%E5%AD%90%E6%BB%A4%E6%B3%A2/" rel="tag">粒子滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E7%BA%BF%E6%80%A7%E5%8C%96/" rel="tag">线性化</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E8%AF%AF%E5%B7%AE%E7%8A%B6%E6%80%81%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">误差状态卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E8%BF%AD%E4%BB%A3%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" rel="tag">迭代扩展卡尔曼滤波</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%9B%85%E5%8F%AF%E6%AF%94/" rel="tag">雅可比</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/" rel="tag">非线性优化</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/%E9%AB%98%E6%96%AF%E5%88%86%E5%B8%83/" rel="tag">高斯分布</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签云</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/CKF/" style="font-size: 10px;">CKF</a> <a href="/tags/EKF/" style="font-size: 10px;">EKF</a> <a href="/tags/ESKF/" style="font-size: 11.67px;">ESKF</a> <a href="/tags/FAST-LIO2/" style="font-size: 15px;">FAST-LIO2</a> <a href="/tags/Hessian/" style="font-size: 11.67px;">Hessian</a> <a href="/tags/IEKF/" style="font-size: 11.67px;">IEKF</a> <a href="/tags/IESKF/" style="font-size: 13.33px;">IESKF</a> <a href="/tags/Jacobian/" style="font-size: 10px;">Jacobian</a> <a href="/tags/KF/" style="font-size: 10px;">KF</a> <a href="/tags/LiDAR-IMU/" style="font-size: 11.67px;">LiDAR-IMU</a> <a href="/tags/SLAM/" style="font-size: 20px;">SLAM</a> <a href="/tags/UKF/" style="font-size: 10px;">UKF</a> <a href="/tags/%E4%BB%A3%E4%BB%B7%E5%87%BD%E6%95%B0/" style="font-size: 10px;">代价函数</a> <a href="/tags/%E4%BC%98%E5%8C%96/" style="font-size: 11.67px;">优化</a> <a href="/tags/%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" style="font-size: 10px;">传感器融合</a> <a href="/tags/%E5%8D%8F%E6%96%B9%E5%B7%AE/" style="font-size: 10px;">协方差</a> <a href="/tags/%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 16.67px;">卡尔曼滤波</a> <a href="/tags/%E5%A4%9A%E4%BC%A0%E6%84%9F%E5%99%A8%E8%9E%8D%E5%90%88/" style="font-size: 10px;">多传感器融合</a> <a href="/tags/%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">扩展卡尔曼滤波</a> <a href="/tags/%E6%9C%80%E5%A4%A7%E4%BC%BC%E7%84%B6%E4%BC%B0%E8%AE%A1/" style="font-size: 10px;">最大似然估计</a> <a href="/tags/%E6%9C%80%E5%A4%A7%E5%90%8E%E9%AA%8C%E4%BC%B0%E8%AE%A1/" style="font-size: 10px;">最大后验估计</a> <a href="/tags/%E6%9C%80%E5%B0%8F%E4%BA%8C%E4%B9%98/" style="font-size: 13.33px;">最小二乘</a> <a href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA/" style="font-size: 10px;">机器人</a> <a href="/tags/%E6%9C%BA%E5%99%A8%E4%BA%BA%E5%AE%9A%E4%BD%8D/" style="font-size: 13.33px;">机器人定位</a> <a href="/tags/%E6%A2%AF%E5%BA%A6/" style="font-size: 11.67px;">梯度</a> <a href="/tags/%E6%A2%AF%E5%BA%A6%E4%B8%8B%E9%99%8D/" style="font-size: 10px;">梯度下降</a> <a href="/tags/%E6%AE%8B%E5%B7%AE/" style="font-size: 10px;">残差</a> <a href="/tags/%E6%B3%B0%E5%8B%92%E5%B1%95%E5%BC%80/" style="font-size: 13.33px;">泰勒展开</a> <a href="/tags/%E6%BF%80%E5%85%89%E6%83%AF%E6%80%A7%E9%87%8C%E7%A8%8B%E8%AE%A1/" style="font-size: 10px;">激光惯性里程计</a> <a href="/tags/%E7%89%9B%E9%A1%BF%E6%B3%95/" style="font-size: 11.67px;">牛顿法</a> <a href="/tags/%E7%8A%B6%E6%80%81%E4%BC%B0%E8%AE%A1/" style="font-size: 18.33px;">状态估计</a> <a href="/tags/%E7%B2%92%E5%AD%90%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">粒子滤波</a> <a href="/tags/%E7%BA%BF%E6%80%A7%E5%8C%96/" style="font-size: 10px;">线性化</a> <a href="/tags/%E8%AF%AF%E5%B7%AE%E7%8A%B6%E6%80%81%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">误差状态卡尔曼滤波</a> <a href="/tags/%E8%BF%AD%E4%BB%A3%E6%89%A9%E5%B1%95%E5%8D%A1%E5%B0%94%E6%9B%BC%E6%BB%A4%E6%B3%A2/" style="font-size: 10px;">迭代扩展卡尔曼滤波</a> <a href="/tags/%E9%9B%85%E5%8F%AF%E6%AF%94/" style="font-size: 10px;">雅可比</a> <a href="/tags/%E9%9D%9E%E7%BA%BF%E6%80%A7%E4%BC%98%E5%8C%96/" style="font-size: 15px;">非线性优化</a> <a href="/tags/%E9%AB%98%E6%96%AF%E5%88%86%E5%B8%83/" style="font-size: 10px;">高斯分布</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">归档</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/08/">八月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/07/">七月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/06/">六月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/05/">五月 2026</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/08/05/taylor-linearization-jacobian-slam-iteration/">泰勒展开、线性化与雅可比：非线性问题为什么要反复求解？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/08/03/least-squares-mle-map-robot-state-estimation/">最小二乘、最大似然与最大后验：为什么残差平方能够估计机器人状态？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/08/01/slam-state-observation-prediction-residual-cost-function/">状态、观测、预测、残差与代价函数：SLAM 优化问题是怎么构造出来的？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/07/29/why-robots-need-nonlinear-optimization/">机器人为什么离不开非线性优化？</a>
+          </li>
+        
+          <li>
+            <a href="/2026/07/28/ukf-ckf-particle-filter-overview/">除了 EKF，还有哪些滤波方法？UKF、CKF、粒子滤波简单聊聊</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 Tomato<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+<script>window.MathJax = {  tex: {    inlineMath: [['\\(', '\\)']],    displayMath: [['\\[', '\\]']],    processEscapes: true  },  options: {    skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']  },  chtml: {    scale: 1.08  }};</script><script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script></body>
+</html>
